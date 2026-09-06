@@ -32,14 +32,14 @@ def languages() -> None:
     table.add_column("code")
     table.add_column("script")
     table.add_column("romanisation")
-    table.add_column("normative?")
+    table.add_column("normative")
     table.add_column("failure mode probed")
     for spec in load_languages().values():
         table.add_row(
             spec.code,
             spec.script.value,
             spec.romanisation.standard,
-            "yes" if spec.romanisation.normative else "no",
+            spec.romanisation.normative,
             " ".join(spec.failure_mode.split()),
         )
     console.print(table)

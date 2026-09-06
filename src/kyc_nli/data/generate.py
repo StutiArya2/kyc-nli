@@ -46,11 +46,21 @@ from kyc_nli.schema import (
 from kyc_nli.translit import get_transliterator
 
 #: Issuing-state codes per language, ICAO 3-letter.
+#:
+#: All five active languages map to IND, and that is the point rather than an
+#: oversight: these are five languages appearing on documents issued by ONE
+#: state. An Indian passport prints the holder's name in English and the
+#: regional script on the same physical document, so the cross-script
+#: comparison is in-document rather than across two records from two countries.
 NATIONALITY: dict[str, str] = {
-    "en": "GBR",
+    "en": "IND",
+    "hi": "IND",
+    "ta": "IND",
+    "bn": "IND",
+    "ur": "IND",
+    # Retained, not in the active set (decision 0005).
     "ru": "RUS",
     "ar": "EGY",
-    "hi": "IND",
     "zh": "CHN",
 }
 
@@ -98,13 +108,13 @@ class Identity:
 class GeneratorConfig:
     """Everything needed to reproduce a dataset. Serialised into the manifest."""
 
-    languages: tuple[str, ...] = ("en", "ru", "ar", "hi", "zh")
+    languages: tuple[str, ...] = ("en", "hi", "ta", "bn", "ur")
     identities_per_language: int = 200
     noise_preset: str = "moderate"
     seed: int = 20260906
-    #: Fraction of ENTAILMENT pairs that use a non-normative alternative
-    #: romanisation rather than the exact ICAO output. Raising this makes the
-    #: task harder for a lookup-table baseline and is the main difficulty knob.
+    #: Fraction of ENTAILMENT pairs that use an alternative romanisation
+    #: rather than the one printed on the document. Raising this makes the task
+    #: harder for a lookup-table baseline and is the main difficulty knob.
     alt_romanisation_rate: float = 0.4
 
 
@@ -123,10 +133,16 @@ class InstanceGenerator:
     def make_identity(self, language: str) -> Identity:
         pool: NamePool = pool_for(language)
         spec = self.languages[language]
-        translit = get_transliterator(spec.script)
 
-        surname_native = self.rng.choice(pool.surnames)
-        given_native = self.rng.choice(pool.given)
+        # The pool supplies BOTH forms. The document's Latin zone prints the
+        # attested romanisation the holder actually uses, not whatever a
+        # rule-based romaniser emits -- deriving it from the transliterator
+        # printed SARM for शर्मा and CHUBRAMANIYAN for சுப்ரமணியன். The
+        # transliterator's job is to recognise variants at match time.
+        surname_native, surname_latin = self.rng.choice(pool.surnames)
+        given_native, given_latin = self.rng.choice(pool.given)
+        place_native, _place_latin = self.rng.choice(pool.places)
+        authority_native, _authority_latin = self.rng.choice(pool.authorities)
 
         era, era_start, era_end = self.rng.choice(TEMPLATE_ERAS)
         issue_year = self.rng.randint(era_start, era_end)
@@ -140,16 +156,16 @@ class InstanceGenerator:
             script=spec.script,
             surname_native=surname_native,
             given_native=given_native,
-            surname_latin=translit.canonical(surname_native),
-            given_latin=translit.canonical(given_native),
+            surname_latin=surname_latin,
+            given_latin=given_latin,
             date_of_birth=date_of_birth,
             date_of_issue=date_of_issue,
             date_of_expiry=date_of_expiry,
             document_number=self._document_number(),
             nationality=NATIONALITY[language],
             sex=self.rng.choice(("M", "F")),
-            place_of_birth=self.rng.choice(pool.places),
-            issuing_authority=self.rng.choice(pool.authorities),
+            place_of_birth=place_native,
+            issuing_authority=authority_native,
             template_era=era,
         )
 
@@ -294,7 +310,7 @@ class InstanceGenerator:
         """
         group = f"{stem}-name"
         spec = self.languages[identity.language]
-        translit = get_transliterator(identity.script)
+        translit = get_transliterator(identity.script, identity.language)
         premise = self.build_premise(identity)
         variants = sorted(translit.variants(identity.surname_native))
 

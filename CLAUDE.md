@@ -6,7 +6,9 @@ the summary is in `README.md`.
 ## What this is and where it stands
 
 KYC-NLI reformulates identity-document field verification as three-way
-document-level NLI (entailment / contradiction / neutral) across five scripts.
+document-level NLI (entailment / contradiction / neutral) across the five
+scripts of the Indian document context: Latin, Devanagari, Tamil, Bengali and
+Perso-Arabic (en, hi, ta, bn, ur).
 
 **Current phase: Phase 0 complete, Phase 1 not started.** The generator, the
 transliteration engines, the OCR noise model, the rule baseline and the
@@ -14,7 +16,7 @@ evaluation harness all work. There is no neural model. `src/kyc_nli/nli/` is
 empty on purpose.
 
 **The finding that governs every decision here:** the deterministic rule
-baseline reaches 0.977 macro-F1 on noise-free input. Do not propose work that
+baseline reaches 0.980 macro-F1 on noise-free input. Do not propose work that
 improves clean cross-script matching — there is nothing to win. The contribution
 lives under OCR corruption. See `docs/plan.md`.
 
@@ -34,7 +36,7 @@ python -m venv .venv
 | Generate the benchmark | `.venv/Scripts/kyc-nli generate --identities 200 --noise moderate` |
 | Compare baselines | `.venv/Scripts/kyc-nli compare` |
 | Full report | `.venv/Scripts/kyc-nli run-baseline rule_engine` |
-| Look at real instances | `.venv/Scripts/kyc-nli inspect --language ru -n 3` |
+| Look at real instances | `.venv/Scripts/kyc-nli inspect --language ta -n 3` |
 | Noise ablation | `scripts/run_noise_ablation.ps1` |
 
 Always run tests and lint before declaring a change done. Both are fast.
@@ -99,10 +101,17 @@ Always run tests and lint before declaring a change done. Both are fast.
 ## Common tasks
 
 **Add a language** — add a block to `configs/languages.yaml`; add a `NamePool`
-to `kyc_nli/data/name_pools.py`; add a `Script` member and a `Transliterator`
-subclass if the script is new; register it in `_ENGINE_CLASSES`; add a
-transliteration test with a case that has a known-correct answer. Nothing else
-should need to change; if it does, that is a bug in the abstraction.
+of `(native, attested_latin)` pairs to `kyc_nli/data/name_pools.py`; add a
+`Script` member and a `Transliterator` subclass if the script is new (subclass
+`BrahmicTransliterator` for an Indic abugida — it already does the traversal);
+register it in `_ENGINE_BY_SCRIPT`, or `_ENGINE_BY_LANGUAGE` if it shares a
+script with an existing language; add a recall floor to `RECALL_FLOOR` in
+`tests/test_translit.py`. Nothing else should need to change; if it does, that
+is a bug in the abstraction.
+
+**Never lower a `RECALL_FLOOR` to make a test pass.** They are regression guards
+measured from real behaviour. A drop means the engine got worse, and a
+handicapped baseline makes every comparison against it meaningless.
 
 **Add a baseline** — implement `predict(self, instance) -> Prediction` with a
 `name` class attribute; register it in `kyc_nli/baselines/__init__.py::BASELINES`.

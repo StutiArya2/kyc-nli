@@ -1,6 +1,12 @@
 # 0003 — The five-language set: en, ru, ar, hi, zh
 
-**Status:** accepted · **Date:** 2026-09-06
+**Status:** SUPERSEDED by [0005](0005-indian-language-set.md) · **Date:** 2026-09-06
+
+> Superseded on 2026-09-06. The set below (en/ru/ar/hi/zh) maximised script
+> diversity but was domain-incoherent: five countries, five document regimes,
+> no single deployment containing all five. It is kept for the record, and
+> because its ru and zh engines are retained in code as contrast conditions.
+> The active set is en/hi/ta/bn/ur; see 0005 for the reasoning.
 
 ## Context
 

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import functools
 from pathlib import Path
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from kyc_nli.schema import Script
 
@@ -21,11 +22,35 @@ def repo_root() -> Path:
 
 
 class Romanisation(BaseModel):
+    """How much authority constrains the Latin rendering of a name.
+
+    Three-valued, not boolean. Urdu is the case that forces this: the ICAO
+    Doc 9303 Arabic table fixes the consonants but the script writes no short
+    vowels, so the standard determines part of the answer and a lexicon supplies
+    the rest. Collapsing that to True would overstate what the table gives you;
+    collapsing it to False would discard a real constraint the baseline is
+    entitled to use.
+    """
+
     standard: str
-    #: True when an authority (e.g. ICAO Doc 9303) fixes exactly one correct
-    #: Latin rendering. False means romanisation is genuinely one-to-many, which
-    #: is where a lookup table stops being sufficient.
-    normative: bool
+    #: "full"    an authority fixes exactly one correct Latin rendering
+    #: "partial" the standard constrains the rendering but does not determine it
+    #: "none"    romanisation is genuinely one-to-many; a lookup table cannot
+    #:           be sufficient even in principle
+    normative: Literal["full", "partial", "none"]
+
+    @field_validator("normative", mode="before")
+    @classmethod
+    def _coerce_legacy_bool(cls, v: object) -> object:
+        """Accept the old boolean form so pre-0005 configs still load."""
+        if isinstance(v, bool):
+            return "full" if v else "none"
+        return v
+
+    @property
+    def is_normative(self) -> bool:
+        """True when a lookup table alone could in principle be correct."""
+        return self.normative == "full"
 
 
 class LanguageSpec(BaseModel):

@@ -18,14 +18,17 @@ The document's evidence, correctly interpreted, supports the hypothesis.
 
 "Correctly interpreted" is doing the work. It covers:
 
-- **Cross-script equivalence.** VIZ `ИВАНОВ` entails "surname is IVANOV",
-  because ICAO Doc 9303 Part 3 fixes that transliteration and the MRZ on the
-  same document carries it.
-- **Non-normative romanisation.** VIZ `شرما` entails "surname is SHARMA" and
-  also "surname is SHARMAA", because Arabic and Hindi romanisation is genuinely
-  one-to-many. All members of the accepted variant set entail.
+- **Cross-script equivalence.** The regional zone `शर्मा` entails "surname is
+  SHARMA", because the English zone of the same document carries it.
+- **Non-normative romanisation.** `சுப்ரமணியன்` entails "surname is
+  SUBRAMANIYAN" and equally "surname is SUPRAMANIYAN": Tamil script does not
+  mark voicing, so ப is P or B with equal legitimacy. All members of the
+  accepted variant set entail.
+- **Script-level alternation.** Bengali `বসু` entails both "BASU" and "BOSE";
+  `বন্দ্যোপাধ্যায়` entails both "BANDYOPADHYAY" and "BANDOPADHYAY".
+- **Skeleton plus lexicon.** Urdu `صدیقی` writes no short vowels; it entails
+  "SIDDIQUI" even though the script yields only the skeleton SDYQY.
 - **Format variance.** MRZ `900312` entails "born on 1990-03-12".
-- **Name-order variance.** Han `王伟` entails both "WANG WEI" and "WEI WANG".
 - **Surviving OCR corruption.** If the underlying printed string entails the
   hypothesis and OCR corrupted a character, the label stays ENTAILMENT. The
   gold label describes the *document*, not the scan.
@@ -34,7 +37,7 @@ The document's evidence, correctly interpreted, supports the hypothesis.
 
 | Premise (relevant zone) | Hypothesis | Label | Why |
 | --- | --- | --- | --- |
-| VIZ `ЮРИЙ` (Cyrl), MRZ `IURII` | "The holder's given names are YURI." | ENTAILMENT | `YURI` is an attested romanisation; `IURII` is the ICAO form of the same string. Zero shared characters with the VIZ is irrelevant. |
+| Regional `கண்ணன்` (Taml), English zone `KANNAN` | "The holder's given names are GANNAN." | ENTAILMENT | Tamil க is K or G; both are correct romanisations of one string. Zero shared characters with the regional zone is irrelevant. |
 | MRZ `900312`, VIZ `12 MAR 1990` | "The holder was born on 1990-03-12." | ENTAILMENT | Two zones, two formats, one date. |
 
 ## CONTRADICTION
@@ -74,18 +77,21 @@ A hypothesis is NEUTRAL when, and only when:
 - **The field is present but unreadable**, and no other zone carries it. The
   document has the answer; this scan does not.
 - **The hypothesis is strictly more specific than the document.** The document
-  says `MOHAMMED AL-ANSARI`; the hypothesis asserts a middle name the document
-  never records. Compatible, unconfirmed.
+  says `MOHAMMAD ANSARI`; the hypothesis asserts a middle name the document
+  never records. Compatible, unconfirmed. The Tamil convention of an initial
+  standing for the father's name is the sharpest version of this: `R. KUMAR` is
+  compatible with RAJESH KUMAR *and* with RAMESH KUMAR, so a claim that two such
+  records are the same person is underdetermined by the evidence.
 
-A hypothesis is **not** NEUTRAL merely because matching is hard. `ЮРИЙ` versus
-`YURI` is ENTAILMENT, however low the string similarity.
+A hypothesis is **not** NEUTRAL merely because matching is hard. `சுப்ரமணியன்`
+versus `SUPRAMANIYAN` is ENTAILMENT, however low the string similarity.
 
 ### Worked examples
 
 | Premise | Hypothesis | Label | Why |
 | --- | --- | --- | --- |
-| MRZ only; no VIZ captured | "The holder was born in CAIRO." | NEUTRAL | The MRZ has no place-of-birth field. Nothing in the premise bears on the claim. |
-| VIZ surname reads `???????`, conf. 0.05; MRZ surname absent | "The holder's surname is SHARMA." | NEUTRAL | The evidence exists on the document but not in this observation. Route to human review. |
+| MRZ only; no VIZ captured | "The holder was born in MADURAI." | NEUTRAL | The MRZ has no place-of-birth field. Nothing in the premise bears on the claim. |
+| Regional surname reads `???????`, conf. 0.05; English zone surname absent | "The holder's surname is SHARMA." | NEUTRAL | The evidence exists on the document but not in this observation. Route to human review. |
 
 ### The boundary everybody gets wrong
 

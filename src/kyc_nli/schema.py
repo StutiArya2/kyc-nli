@@ -34,11 +34,13 @@ class Script(str, Enum):
     """Writing system of an observed string. Distinct from language."""
 
     LATIN = "Latn"
-    CYRILLIC = "Cyrl"
-    ARABIC = "Arab"
     DEVANAGARI = "Deva"
-    HAN = "Hani"
     TAMIL = "Taml"
+    BENGALI = "Beng"
+    ARABIC = "Arab"  # Perso-Arabic, used for Urdu
+    # Retained but not in the active language set; see decision 0005.
+    CYRILLIC = "Cyrl"
+    HAN = "Hani"
 
 
 class Zone(str, Enum):

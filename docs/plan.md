@@ -22,20 +22,20 @@ baselines were run on it.
 
 | OCR noise | exact match macro-F1 | **rule engine macro-F1** | rule contrast consistency | rule false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.425 | **0.977** | 0.944 | 0.000 |
-| light | 0.411 | **0.899** | 0.782 | 0.119 |
-| moderate | 0.373 | **0.801** | 0.633 | 0.216 |
-| heavy | 0.289 | **0.650** | 0.385 | 0.136 |
+| clean | 0.371 | **0.980** | 0.952 | 0.000 |
+| light | 0.359 | **0.903** | 0.793 | 0.098 |
+| moderate | 0.353 | **0.831** | 0.652 | 0.133 |
+| heavy | 0.285 | **0.649** | 0.396 | 0.156 |
 
 Read the first row. **On noise-free input the deterministic rule engine reaches
-0.977 macro-F1 and 0.944 contrast-group consistency.** There is roughly two
+0.980 macro-F1 and 0.952 contrast-group consistency.** There is roughly two
 points of headroom. A neural document-level NLI model cannot produce a
 publishable result on clean cross-script field matching, because the problem is
 already solved by a lookup table and a fuzzy-match threshold.
 
 The rule engine degrades steeply as OCR noise rises, and it degrades in a
 specific, diagnosable way: corrupted strings stop parsing, the engine loses the
-evidence it needs, and it abstains. Human review load goes from 30% to 57%
+evidence it needs, and it abstains. Human review load goes from 29% to 56%
 between clean and heavy noise.
 
 **Therefore the contribution lives in the noisy regime, not the clean one.** The
@@ -99,7 +99,7 @@ a fair proxy for real OCR. If it is not, the headline result is an artifact and
 a reviewer will say so.
 
 The go/no-go signal on the revised central claim is available at the end of
-Phase 1: if a fine-tuned model does not beat 0.801 macro-F1 at moderate noise
+Phase 1: if a fine-tuned model does not beat 0.831 macro-F1 at moderate noise
 *and* improve the risk–coverage curve, the claim is false.
 
 ---
@@ -110,7 +110,7 @@ Phase 1: if a fine-tuned model does not beat 0.801 macro-F1 at moderate noise
 | --- | --- | --- | --- |
 | M0 | Repo, schema, generator, rule baseline, eval harness | ✅ this commit | — |
 | M1 | Noise-model calibration vs. Tesseract/EasyOCR on MIDV-2020 crops | per-script CER + confusion matrices replacing the hand-built tables | MIDV-2020 access |
-| M2 | Real name data: Dakshina (hi), Wikidata (ar/ru/zh) replacing embedded pools | `data/external/` loaders + regenerated benchmark | M1 |
+| M2 | Real name data: Dakshina replacing embedded pools — one CC BY-SA 4.0 download covers hi, ta, bn and ur | `data/external/` loaders + regenerated benchmark | M1 |
 | M3 | Fine-tuned mDeBERTa-v3-base cross-encoder on Colab | `src/kyc_nli/nli/` + checkpoint + results table | M2 |
 | M4 | Selective-prediction analysis | risk–coverage curves, review-load-at-fixed-error table | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |
@@ -129,7 +129,7 @@ of calibration is known.
 | Risk | Likelihood | Impact | Early warning | Mitigation | Fallback contribution |
 | --- | --- | --- | --- | --- | --- |
 | Noise model is not a fair proxy for real OCR | High | Fatal to headline | Measured CER on MIDV crops differs from the simulated rate by >2x | M1 calibration before any model training | Report the calibration itself: a per-script OCR error characterisation for identity documents is publishable on its own |
-| Neural model fails to beat the rule engine even under noise | Medium | Fatal to central claim | Dev macro-F1 below 0.80 after one training run | Hybrid: model only adjudicates instances the rule engine abstains on | Negative result plus the benchmark and the strong baseline — genuinely useful, and honest |
+| Neural model fails to beat the rule engine even under noise | Medium | Fatal to central claim | Dev macro-F1 below 0.83 after one training run | Hybrid: model only adjudicates instances the rule engine abstains on | Negative result plus the benchmark and the strong baseline — genuinely useful, and honest |
 | Synthetic benchmark dismissed as generator artifact | High | Major | Reviewer says "your model learned your noise model" | M2 real name data; M5 human validation; report cross-generator transfer | Position the benchmark as a diagnostic contrast set rather than a leaderboard |
 | No GPU access when needed | Medium | Schedule | Colab quota exhausted mid-run | Kaggle (30 GPU-hr/week) as second source; checkpoint every epoch | Smaller model; the claim does not depend on scale |
 | MIDV / Dakshina licensing blocks release | Medium | Moderate | Terms review at M1/M2 | Release annotations + generation code, not derived images | Code-and-protocol release, which is standard for this data situation |

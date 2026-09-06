@@ -201,7 +201,10 @@ class RuleBaseline:
     def _latin_candidates(self, obs: FieldObservation) -> set[str]:
         """All Latin renderings of an observation, via its script's engine."""
         try:
-            engine = get_transliterator(obs.script)
+            # Pass the language: Urdu and Arabic share a script but need
+            # different tables, and dispatching on script alone silently gives
+            # Urdu names the Arabic treatment.
+            engine = get_transliterator(obs.script, obs.language)
         except NotImplementedError:
             return {_normalise(obs.value)}
         return {_normalise(v) for v in engine.variants(obs.value)} | {_normalise(obs.value)}

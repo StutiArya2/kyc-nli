@@ -1,9 +1,13 @@
-# The five languages covered by KYC-NLI v1.
+# The five languages covered by KYC-NLI v1: the Indian document context.
 #
 # Selection criteria, in priority order:
 #   1. Distinct script  -> the cross-script matching problem is real, not cosmetic.
 #   2. A *public, licensable* source of native<->Latin name pairs exists.
 #   3. Each contributes a failure mode the others do not.
+#   4. All five appear on documents issued by ONE state, so the cross-script
+#      comparison is in-document rather than across two countries' records.
+#
+# Rationale in full: docs/decisions/0005-indian-language-set.md
 #
 # Adding a sixth language means adding a block here plus a name pool in
 # src/kyc_nli/data/name_pools.py. Nothing else in the codebase hardcodes a language.
@@ -15,79 +19,91 @@ languages:
     romanisation:
       # Latin source script; romanisation is the identity function.
       standard: identity
-      normative: true
+      normative: full
     failure_mode: >
-      Control condition. Isolates how much of any measured gain is script
-      transfer versus ordinary lexical variation (nicknames, middle-name
-      dropping, hyphenation).
+      Control condition. Every Indian identity document carries an English
+      zone, so this is not an artificial baseline -- it is the zone the
+      other four are compared against. Isolates how much of any measured
+      gain is cross-script transfer versus ordinary lexical variation
+      (initials, middle-name dropping, hyphenation).
     sources:
       - name: embedded synthetic pool
         license: MIT (this repo)
-
-  - code: ru
-    name: Russian
-    script: Cyrl
-    romanisation:
-      standard: ICAO Doc 9303 Part 3, Cyrillic transliteration table
-      normative: true
-    failure_mode: >
-      VIZ prints Cyrillic; the MRZ on the same physical document prints the
-      ICAO Latin transliteration. The two strings share zero characters, so
-      exact matching produces a guaranteed false mismatch on every single
-      Russian passport. There is a *normative* correct answer, which makes
-      errors adjudicable rather than a matter of opinion.
-    sources:
-      - name: MIDV-500 / MIDV-2020 (Russian passport & ID templates, mock identities)
-        license: free for research; verify redistribution terms before releasing derivatives
-      - name: Wikidata person labels (ru + en)
-        license: CC0
-
-  - code: ar
-    name: Arabic
-    script: Arab
-    romanisation:
-      standard: ICAO Doc 9303 Part 3, Arabic transliteration table
-      normative: true
-    failure_mode: >
-      Right-to-left, optional diacritics that OCR routinely drops, and a
-      one-to-many romanisation (Muhammad / Mohammed / Mohamad are all valid for
-      one Arabic string). Tests whether the model treats romanisation as a
-      set-valued relation rather than a function.
-    sources:
-      - name: Wikidata person labels (ar + en)
-        license: CC0
 
   - code: hi
     name: Hindi
     script: Deva
     romanisation:
-      standard: no single normative table; ITRANS / IAST / ad-hoc romanisation coexist
-      normative: false
+      standard: no normative table; ITRANS / IAST / ad-hoc romanisation coexist
+      normative: none
     failure_mode: >
-      Genuinely non-normative romanisation: the same name is romanised
-      differently by the holder on different forms. This is the case where a
-      normative lookup table cannot help and a learned model plausibly can --
-      i.e. the strongest argument for the NLI approach over a rule engine.
+      Non-normative romanisation: the same holder romanises their own name
+      differently on different forms, and no authority fixes the answer.
+      This is the case a lookup table cannot solve and a learned model
+      plausibly can -- the core argument for the method.
     sources:
       - name: Dakshina dataset (Google Research) - native/romanised lexicons
         license: CC BY-SA 4.0
         url: https://github.com/google-research-datasets/dakshina
 
-  - code: zh
-    name: Chinese (Mandarin)
-    script: Hani
+  - code: ta
+    name: Tamil
+    script: Taml
     romanisation:
-      standard: Hanyu Pinyin (as used in PRC passport MRZ)
-      normative: true
+      standard: none; the script does not mark voicing at all
+      normative: none
     failure_mode: >
-      Name-order inversion (family name first in Han, variable in Latin), no
-      whitespace in the source string, and heavy homophony after romanisation
-      (many distinct Han names collapse to the same Pinyin). Produces the
-      opposite error to Arabic: false *matches* rather than false mismatches.
+      The strongest form of the Hindi argument. Tamil orthography does not
+      distinguish voiced from voiceless stops: one letter is read K or G,
+      CH or S, T or D, TH or DH, P or B depending on position. A lookup
+      table cannot be right here even in principle, because there is no
+      single right answer to look up. Tamil naming also often omits a
+      surname in favour of an initial standing for the father's name.
     sources:
-      - name: Wikidata person labels (zh + en)
-        license: CC0
+      - name: Dakshina dataset (Google Research)
+        license: CC BY-SA 4.0
+        url: https://github.com/google-research-datasets/dakshina
 
-# Swap-in candidate, not enabled in v1:
-#   ta (Tamil, Taml) -- covered by Dakshina, agglutinative, adds a second
-#   Brahmic script. Enable by moving this block into `languages` above.
+  - code: bn
+    name: Bengali
+    script: Beng
+    romanisation:
+      standard: none; competing Sanskritic and phonetic conventions
+      normative: none
+    failure_mode: >
+      The inherent vowel is phonetically nearer /o/ than /a/ and the
+      language has no /v/, so one name surfaces as BANERJEE or BONERJEE,
+      BASU or BOSE, BISWAS or BISHWAS. The ya-phala shares a letter with
+      /dz/, which is why BANDYOPADHYAY and BANDOPADHYAY both occur. Tests
+      whether a model learns a script-level alternation rather than a
+      per-name mapping.
+    sources:
+      - name: Dakshina dataset (Google Research)
+        license: CC BY-SA 4.0
+        url: https://github.com/google-research-datasets/dakshina
+
+  - code: ur
+    name: Urdu
+    script: Arab
+    romanisation:
+      standard: ICAO Doc 9303 Part 3 Arabic table, extended for Perso-Arabic
+      normative: partial
+    failure_mode: >
+      Right-to-left, short vowels not written at all, and diacritics that
+      OCR routinely drops -- so the script gives a consonant skeleton and
+      the vowels must be supplied from a lexicon. One skeleton maps to
+      Mohammad / Muhammad / Mohd, and SDYQY to Siddiqui. The only language
+      in the set with even partial normative backing, which makes it the
+      contrast case against Hindi, Tamil and Bengali.
+    sources:
+      - name: Dakshina dataset (Google Research) - Urdu lexicon
+        license: CC BY-SA 4.0
+        url: https://github.com/google-research-datasets/dakshina
+
+# Not enabled in v1, retained in code (decision 0005):
+#   ru (Cyrillic)  the one script with a fully normative ICAO table -- useful as
+#                  the contrast condition a lookup table SHOULD win.
+#   zh (Han)       name-order inversion; produces false matches rather than
+#                  false mismatches.
+# Both keep working name pools and transliterators, so "does this generalise
+# beyond the Indian context?" stays a cheap experiment rather than a rewrite.

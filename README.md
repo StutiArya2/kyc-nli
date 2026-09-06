@@ -4,8 +4,8 @@ Document-level natural language inference for identity-document field verificati
 
 Identity verification ("KYC") systems check whether the name and dates on a
 scanned passport match what someone typed into a form. Almost all of them do
-this with string comparison, which fails in a predictable way: a Russian
-passport prints `ИВАНОВ` on its face and `IVANOV` in its machine-readable zone,
+this with string comparison, which fails in a predictable way: an Indian
+passport prints `शर्मा` in its regional zone and `SHARMA` in its English zone,
 two strings that share zero characters and describe the same person. This
 project reformulates that check as three-way entailment — does the document
 **support**, **refute**, or **not say** — so that cross-script equivalence,
@@ -13,7 +13,7 @@ format variation and OCR corruption are handled by inference instead of by
 exact matching.
 
 > **Read this before using any number from this repo.** The Phase-0 pilot found
-> that a *deterministic rule engine* reaches 0.977 macro-F1 on noise-free input.
+> that a *deterministic rule engine* reaches 0.980 macro-F1 on noise-free input.
 > The defensible contribution is therefore in the OCR-noise regime, not in clean
 > cross-script matching. See [Phase-0 finding](#the-phase-0-finding) and
 > [`docs/plan.md`](docs/plan.md).
@@ -26,7 +26,7 @@ These are the motivating cases. The last column is what a correct system does.
 
 | Case | What the document shows | What the form says | Exact match returns | Correct answer |
 | --- | --- | --- | --- | --- |
-| **Cross-script name** | VIZ `ЮРИЙ` (Cyrillic), MRZ `IURII` | `YURI` | ✗ mismatch → genuine holder rejected | **ENTAILMENT** — all three are the same name; ICAO Doc 9303 fixes `Ю → IU`, and `YU` is the spelling holders actually write |
+| **Cross-script name** | Regional zone `சுப்ரமணியன்` (Tamil), English zone `SUBRAMANIYAN` | `SUPRAMANIYAN` | ✗ mismatch → genuine holder rejected | **ENTAILMENT** — Tamil script does not mark voicing, so ப is P or B with equal legitimacy; both spellings are correct romanisations of one name |
 | **Jointly impossible dates** | Issue `1995-06-02`, Expiry `2035-06-02`, Template `2020-polycarbonate` | `expires 2035-06-02` | ✓ match → forgery passes | **CONTRADICTION** — every field is individually valid, but a 40-year validity on a template introduced in 2020 cannot exist |
 | **Cascading OCR failure** | VIZ surname reads `???????` (conf. 0.05); no other zone carries it | `SHARMA` | ✗ mismatch → treated as fraud | **NEUTRAL** — the document has the answer, this scan does not; route to a human |
 
@@ -97,17 +97,17 @@ fuzzy thresholds. Then the benchmark was generated at four OCR-noise levels.
 
 | OCR noise | `exact_match` macro-F1 | **`rule_engine` macro-F1** | contrast consistency | false-mismatch rate |
 | --- | --- | --- | --- | --- |
-| clean | 0.425 | **0.977** | 0.944 | 0.000 |
-| light | 0.411 | **0.899** | 0.782 | 0.119 |
-| moderate | 0.373 | **0.801** | 0.633 | 0.216 |
-| heavy | 0.289 | **0.650** | 0.385 | 0.136 |
+| clean | 0.371 | **0.980** | 0.952 | 0.000 |
+| light | 0.359 | **0.903** | 0.793 | 0.098 |
+| moderate | 0.353 | **0.831** | 0.652 | 0.133 |
+| heavy | 0.285 | **0.649** | 0.396 | 0.156 |
 
 *(5 languages, 120 identities each, seed 20260906; reproduce with
 `scripts/run_noise_ablation.ps1`.)*
 
-**A rule engine gets 0.977 on clean input.** There is no room for a neural
+**A rule engine gets 0.980 on clean input.** There is no room for a neural
 contribution there. It degrades steeply under corruption — human review load
-rises from 30% to 57% between clean and heavy — so that is where the
+rises from 29% to 56% between clean and heavy — so that is where the
 contribution has to live. The revised claim is about **selective prediction
 under input corruption**, and it is falsifiable by the risk–coverage curve.
 
@@ -119,19 +119,32 @@ the project's single point of failure —
 
 ## Languages
 
-Five scripts, each contributing a failure mode the others do not.
-[Decision 0003](docs/decisions/0003-five-language-set.md) has the full rationale.
+Five scripts from the **Indian document context** — Latin, Devanagari, Tamil,
+Bengali and Perso-Arabic. All five are official Indian languages, and all five
+appear on documents issued by one state, so the cross-script comparison is
+*in-document* rather than across two countries' records: an Indian identity
+document prints the holder's name in English and a regional script on the same
+card. [Decision 0005](docs/decisions/0005-indian-language-set.md) has the full
+rationale.
 
-| code | script | romanisation | normative? | probes |
+| code | script | romanisation | normative | probes |
 | --- | --- | --- | --- | --- |
-| `en` | Latin | identity | — | control condition |
-| `ru` | Cyrillic | ICAO Doc 9303 Part 3 | yes | zero-overlap VIZ/MRZ pairs with a *normative* right answer |
-| `ar` | Arabic | ICAO Doc 9303 Part 3 | yes | RTL, dropped diacritics, one-to-many romanisation |
-| `hi` | Devanagari | none — ITRANS/IAST/ad-hoc | **no** | the case a lookup table *cannot* solve |
-| `zh` | Han | Hanyu Pinyin | yes | name-order inversion; false *matches*, not mismatches |
+| `en` | Latin | identity | full | Control — the English zone the other four are compared *against*, not an artificial baseline |
+| `hi` | Devanagari | ITRANS / IAST / ad-hoc | **none** | The same holder romanises their own name differently on different forms |
+| `ta` | Tamil | none | **none** | **The script does not mark voicing at all** — க is K or G, ப is P or B, equally correctly. A lookup table cannot be right even in principle |
+| `bn` | Bengali | none | **none** | Inherent vowel nearer /o/ (BASU/BOSE), no /v/, ya-phala shares a letter with /dʒ/ (BANDYOPADHYAY/BANDOPADHYAY) |
+| `ur` | Perso-Arabic | ICAO 9303 Arabic, extended | partial | Short vowels unwritten: the script gives a skeleton (SDYQY), a lexicon supplies the rest (SIDDIQUI) |
+
+Four of five are non-normative or partial — the set is concentrated on the regime
+where the project's claim could be true. Measured romanisation recall of the rule
+engine against the attested spellings: en 100%, hi 90%, ta 92%, bn 100%, ur 98%.
+The residual needs schwa *epenthesis*, monophthongisation or Grantha conjunct
+handling, and is reported rather than tuned away.
 
 Nothing hardcodes a language. Adding a sixth is a block in
-`configs/languages.yaml` plus a name pool. Tamil is the documented swap-in.
+`configs/languages.yaml` plus a name pool. Russian and Chinese are retained in
+code as contrast conditions — a normative-table language and a false-*match*
+language — so "does this generalise beyond India?" is a config edit.
 
 ## Installation
 
@@ -164,7 +177,7 @@ Smallest command producing a real result — about 20 seconds end to end:
 Then look at actual instances before trusting any number:
 
 ```bash
-.venv/Scripts/kyc-nli inspect --language ru --phenomenon cross_script_name_icao -n 2
+.venv/Scripts/kyc-nli inspect --language ta --phenomenon cross_script_name_icao -n 2
 ```
 
 Other commands: `kyc-nli languages`, `kyc-nli run-baseline rule_engine`.
@@ -180,9 +193,8 @@ repo-wide as a second guard.
 | Source | Used for | License | Status |
 | --- | --- | --- | --- |
 | `kyc_nli.data.name_pools` (embedded) | fabricated names for all 5 languages | MIT (this repo) | ✅ in use |
-| Dakshina | Hindi native/romanised lexicons | CC BY-SA 4.0 | planned (M2) |
-| Wikidata person labels | ar / ru / zh cross-script name pairs | CC0 | planned (M2) |
-| MIDV-2020 | Russian document templates, mock identities; OCR noise calibration | free for research — **redistribution terms must be confirmed before releasing derived annotations** | planned (M1) |
+| Dakshina | **all four** non-English languages: native/romanised lexicon pairs for hi, ta, bn, ur | CC BY-SA 4.0 | planned (M2) |
+| MIDV-2020 | document templates, mock identities; OCR noise calibration | free for research — **redistribution terms must be confirmed before releasing derived annotations** | planned (M1) |
 
 The embedded pools pair common given names with common surnames at random. A
 randomly paired name carries no identifying information, and this is what lets
@@ -234,7 +246,7 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [x] **M0** Schema, generator, MRZ encoder, transliteration engines, OCR noise model, rule baseline, evaluation harness
 - [x] Phase-0 pilot and go/no-go signal
 - [ ] **M1** Calibrate the noise model against a real OCR engine on MIDV-2020 — *critical path*
-- [ ] **M2** Replace embedded name pools with Dakshina + Wikidata
+- [ ] **M2** Replace embedded name pools with Dakshina (covers all four non-English languages)
 - [ ] **M3** Fine-tuned mDeBERTa-v3-base cross-encoder (Colab/Kaggle GPU)
 - [ ] **M4** Selective-prediction analysis: risk–coverage, review-load reduction
 - [ ] **M5** Human-labelled 500-instance validation subset, inter-annotator agreement
