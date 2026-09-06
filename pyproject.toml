@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kyc-nli"
+version = "0.1.0"
+description = "Document-level natural language inference for identity-document field verification"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Stuti Arya" }]
+keywords = ["nli", "entailment", "kyc", "identity-verification", "transliteration", "ocr"]
+
+# Core deps are deliberately CPU-only and small: the whole Phase-0 pilot
+# (data generation, rule baseline, evaluation) must run on a laptop with no GPU.
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "rapidfuzz>=3.6",
+    "python-dateutil>=2.9",
+    "typer>=0.12",
+    "rich>=13.7",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+# Phase 1: neural NLI. Installed on Colab/Kaggle, NOT required locally.
+nli = [
+    "torch>=2.2",
+    "transformers>=4.40",
+    "sentencepiece>=0.2",
+    "accelerate>=0.30",
+    "datasets>=2.19",
+    "evaluate>=0.4",
+]
+# Optional real-OCR path. The default noise model is simulated, not OCR-derived.
+ocr = [
+    "pillow>=10.3",
+    "pytesseract>=0.3.10",
+]
+# Optional higher-fidelity transliteration backends.
+translit = [
+    "pypinyin>=0.51",
+    "indic-transliteration>=2.3",
+]
+dev = [
+    "pytest>=8.1",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "nbstripout>=0.7",
+]
+
+[project.scripts]
+kyc-nli = "kyc_nli.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# typer declares CLI options as call-valued defaults; B008 is a false
+# positive for that idiom, not a bug to fix.
+"src/kyc_nli/cli.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["kyc_nli"]
+ignore_missing_imports = true

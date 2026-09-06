@@ -1,0 +1,93 @@
+# The five languages covered by KYC-NLI v1.
+#
+# Selection criteria, in priority order:
+#   1. Distinct script  -> the cross-script matching problem is real, not cosmetic.
+#   2. A *public, licensable* source of native<->Latin name pairs exists.
+#   3. Each contributes a failure mode the others do not.
+#
+# Adding a sixth language means adding a block here plus a name pool in
+# src/kyc_nli/data/name_pools.py. Nothing else in the codebase hardcodes a language.
+
+languages:
+  - code: en
+    name: English
+    script: Latn
+    romanisation:
+      # Latin source script; romanisation is the identity function.
+      standard: identity
+      normative: true
+    failure_mode: >
+      Control condition. Isolates how much of any measured gain is script
+      transfer versus ordinary lexical variation (nicknames, middle-name
+      dropping, hyphenation).
+    sources:
+      - name: embedded synthetic pool
+        license: MIT (this repo)
+
+  - code: ru
+    name: Russian
+    script: Cyrl
+    romanisation:
+      standard: ICAO Doc 9303 Part 3, Cyrillic transliteration table
+      normative: true
+    failure_mode: >
+      VIZ prints Cyrillic; the MRZ on the same physical document prints the
+      ICAO Latin transliteration. The two strings share zero characters, so
+      exact matching produces a guaranteed false mismatch on every single
+      Russian passport. There is a *normative* correct answer, which makes
+      errors adjudicable rather than a matter of opinion.
+    sources:
+      - name: MIDV-500 / MIDV-2020 (Russian passport & ID templates, mock identities)
+        license: free for research; verify redistribution terms before releasing derivatives
+      - name: Wikidata person labels (ru + en)
+        license: CC0
+
+  - code: ar
+    name: Arabic
+    script: Arab
+    romanisation:
+      standard: ICAO Doc 9303 Part 3, Arabic transliteration table
+      normative: true
+    failure_mode: >
+      Right-to-left, optional diacritics that OCR routinely drops, and a
+      one-to-many romanisation (Muhammad / Mohammed / Mohamad are all valid for
+      one Arabic string). Tests whether the model treats romanisation as a
+      set-valued relation rather than a function.
+    sources:
+      - name: Wikidata person labels (ar + en)
+        license: CC0
+
+  - code: hi
+    name: Hindi
+    script: Deva
+    romanisation:
+      standard: no single normative table; ITRANS / IAST / ad-hoc romanisation coexist
+      normative: false
+    failure_mode: >
+      Genuinely non-normative romanisation: the same name is romanised
+      differently by the holder on different forms. This is the case where a
+      normative lookup table cannot help and a learned model plausibly can --
+      i.e. the strongest argument for the NLI approach over a rule engine.
+    sources:
+      - name: Dakshina dataset (Google Research) - native/romanised lexicons
+        license: CC BY-SA 4.0
+        url: https://github.com/google-research-datasets/dakshina
+
+  - code: zh
+    name: Chinese (Mandarin)
+    script: Hani
+    romanisation:
+      standard: Hanyu Pinyin (as used in PRC passport MRZ)
+      normative: true
+    failure_mode: >
+      Name-order inversion (family name first in Han, variable in Latin), no
+      whitespace in the source string, and heavy homophony after romanisation
+      (many distinct Han names collapse to the same Pinyin). Produces the
+      opposite error to Arabic: false *matches* rather than false mismatches.
+    sources:
+      - name: Wikidata person labels (zh + en)
+        license: CC0
+
+# Swap-in candidate, not enabled in v1:
+#   ta (Tamil, Taml) -- covered by Dakshina, agglutinative, adds a second
+#   Brahmic script. Enable by moving this block into `languages` above.

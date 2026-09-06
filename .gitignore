@@ -1,0 +1,89 @@
+# ---- HARD GUARDS: never commit document data ----
+# Anchored with a leading slash so these match ONLY the top-level directories.
+# An unanchored `data/` also matches src/kyc_nli/data/ and configs/data/, which
+# silently excluded the source package from the first commit. Do not un-anchor.
+/data/
+/results/*
+!/results/MANIFEST.md
+.env
+*.env.local
+
+# Image / scan / document formats blocked at ANY depth, as a guard against
+# accidentally committing identity-document scans.
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.bmp
+*.webp
+*.heic
+*.pdf
+# Allow explicitly-vetted figures and the proposal deck only.
+!docs/figures/*.png
+!docs/figures/*.svg
+!docs/proposal/*.pptx
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ---- Envs ----
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# ---- Testing / typing / linting caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# ---- Model / experiment artifacts ----
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+wandb/
+mlruns/
+lightning_logs/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*

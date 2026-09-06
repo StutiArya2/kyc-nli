@@ -1,0 +1,24 @@
+# Default benchmark generation config.
+#
+# Any change to this file changes the dataset, so bump `version` and record the
+# reason. The manifest written alongside each dataset records the config that
+# actually produced it -- that record, not this file, is the source of truth for
+# a given result.
+
+version: v0
+generator: synthetic_v0
+
+# Languages are taken from configs/languages.yaml. Do not duplicate the list here.
+identities_per_language: 200
+noise_preset: moderate      # clean | light | moderate | heavy
+seed: 20260906
+
+# Fraction of ENTAILMENT name pairs that use a non-normative alternative
+# romanisation rather than the exact ICAO output. This is the main difficulty
+# knob: raising it makes the task harder for a lookup-table baseline.
+alt_romanisation_rate: 0.4
+
+splits:
+  # Split by contrast group, stratified by language. See docs/evaluation-protocol.md.
+  dev_fraction: 0.15
+  test_fraction: 0.15

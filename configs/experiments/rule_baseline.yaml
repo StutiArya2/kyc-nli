@@ -1,0 +1,25 @@
+# The strong non-neural baseline. Tune on dev, never on test.
+
+experiment: rule_baseline
+system: rule_engine
+dataset: data/processed/synth_v0.test.jsonl
+
+thresholds:
+  # Similarity at or above which two names are the same person.
+  match_threshold: 88.0
+  # Similarity at or below which they are different people. The band between the
+  # two is the baseline's own abstention zone -- kept deliberately, because
+  # comparing structural NEUTRAL against threshold NEUTRAL is the point.
+  mismatch_threshold: 60.0
+  illegible_confidence: 0.35
+  illegible_char_ratio: 0.3
+
+rules:
+  max_validity_years: 10
+
+report:
+  # All four axes are mandatory. See docs/evaluation-protocol.md.
+  - overall_macro_f1
+  - per_language
+  - per_phenomenon
+  - contrast_consistency
