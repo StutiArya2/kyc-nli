@@ -80,9 +80,29 @@ noise level.
 
 ## Significance
 
-With n ≈ 1000 test instances, report bootstrap 95% confidence intervals
-(1000 resamples) on macro-F1. Differences smaller than the interval width are
-not differences. Not yet implemented; required before M3 results are written up.
+Every reported macro-F1 carries a percentile bootstrap 95% confidence interval,
+1000 resamples. Implemented in `kyc_nli.evaluation.significance`; on by default
+in `kyc-nli compare` and `kyc-nli run-baseline`.
+
+**The resampling unit is the contrast group, not the instance.** Members of a
+group share a premise and differ only in the hypothesis, so their outcomes are
+correlated. Resampling instances independently treats correlated observations as
+independent, understates the variance, and produces intervals that are too narrow
+— measured at about 7% too narrow on the current test set. Too-narrow intervals
+make differences look significant when they are not, which is precisely the error
+a reviewer is looking for. This is the same correlation that forces group-level
+train/test splitting, handled consistently.
+`tests/test_significance.py::test_group_resampling_gives_wider_intervals_than_instance_resampling`
+fails the build if the unit is ever changed back.
+
+**Compare two systems with the paired bootstrap**, not by eyeballing whether two
+intervals overlap. One resample, both systems scored on it, the difference
+recorded. Two overlapping intervals can still correspond to a significant paired
+difference, so the overlap heuristic is both weaker and commonly misread. Use
+`paired_bootstrap` for any claim that one system beats another.
+
+A difference whose paired interval includes zero is not a difference, however
+large the point estimate looks.
 
 ## Reproducibility
 

@@ -34,7 +34,7 @@ python -m venv .venv
 | Autofix lint | `.venv/Scripts/ruff check --fix src tests` |
 | Types | `.venv/Scripts/mypy` |
 | Generate the benchmark | `.venv/Scripts/kyc-nli generate --identities 200 --noise moderate` |
-| Compare baselines | `.venv/Scripts/kyc-nli compare` |
+| Compare baselines (with CIs + paired test) | `.venv/Scripts/kyc-nli compare` |
 | Full report | `.venv/Scripts/kyc-nli run-baseline rule_engine` |
 | Look at real instances | `.venv/Scripts/kyc-nli inspect --language ta -n 3` |
 | Noise ablation | `scripts/run_noise_ablation.ps1` |
@@ -65,6 +65,12 @@ Always run tests and lint before declaring a change done. Both are fast.
 - **Never weaken `baselines/rules.py` to make a model look better.** It is
   deliberately built to win; that is what makes the comparison credible. If a
   rule seems unfair, add the ablation, do not delete the rule.
+- **Never report a macro-F1 without its confidence interval**, and never claim
+  one system beats another without a paired bootstrap. `evaluate(..., bootstrap=N)`
+  and `paired_bootstrap` exist for this. A bare point estimate is an assertion.
+- **Never change the bootstrap resampling unit from the contrast group to the
+  instance.** It silently narrows every interval by treating correlated
+  observations as independent. A test guards this.
 - **Never fabricate a citation, a transliteration table entry, or a standard's
   contents.** Anything not verified against the primary source is marked
   `UNVERIFIED` in-code (see `translit/tables.py`) and must stay marked until

@@ -17,7 +17,7 @@ from rich.table import Table
 from kyc_nli.baselines import BASELINES
 from kyc_nli.data.generate import GeneratorConfig, InstanceGenerator
 from kyc_nli.data.io import load_instances, save_instances, split_by_identity, write_manifest
-from kyc_nli.evaluation import evaluate
+from kyc_nli.evaluation import DEFAULT_RESAMPLES, evaluate, paired_bootstrap
 from kyc_nli.languages import load_languages, repo_root
 from kyc_nli.schema import Label
 
@@ -133,6 +133,9 @@ def run_baseline(
     system: str = typer.Argument(..., help=f"One of: {', '.join(BASELINES)}"),
     dataset: Path = typer.Option(Path("data/processed/synth_v0.test.jsonl")),
     out: Path = typer.Option(Path("results/"), help="Where to write the report."),
+    bootstrap: int = typer.Option(
+        DEFAULT_RESAMPLES, help="Bootstrap resamples for the macro-F1 CI. 0 disables."
+    ),
 ) -> None:
     """Score a non-neural baseline and write a markdown + JSON report."""
     if system not in BASELINES:
@@ -141,7 +144,7 @@ def run_baseline(
     instances = load_instances(_resolve(dataset))
     model = BASELINES[system]()
     predictions = [model.predict(inst) for inst in instances]
-    report = evaluate(system, instances, predictions)
+    report = evaluate(system, instances, predictions, bootstrap=bootstrap)
 
     out_dir = _resolve(out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -156,33 +159,61 @@ def run_baseline(
 @app.command()
 def compare(
     dataset: Path = typer.Option(Path("data/processed/synth_v0.test.jsonl")),
+    bootstrap: int = typer.Option(
+        DEFAULT_RESAMPLES, help="Bootstrap resamples for CIs and the paired test. 0 disables."
+    ),
 ) -> None:
     """Run every baseline on one dataset and print the comparison table.
 
     This is the go/no-go table. Read the per-phenomenon columns, not the
     headline: if the rule engine is already at ceiling on the phenomena the
     proposal leads with, the framing has to change before any model is trained.
+
+    The paired bootstrap at the end is the test that matters. Two overlapping
+    confidence intervals can still be a significant paired difference, so do not
+    read significance off the CI column.
     """
     instances = load_instances(_resolve(dataset))
     table = Table(title=f"Baselines on {dataset.name}", show_lines=True)
     for column in (
-        "system", "macro-F1", "contrast", "false-mismatch", "over-conf(N)", "review load"
+        "system", "macro-F1", "95% CI", "contrast", "false-mismatch",
+        "over-conf(N)", "review load",
     ):
         table.add_column(column)
 
+    predictions: dict[str, list] = {}
     for name, cls in BASELINES.items():
         model = cls()
         preds = [model.predict(i) for i in instances]
-        report = evaluate(name, instances, preds)
+        predictions[name] = preds
+        report = evaluate(name, instances, preds, bootstrap=bootstrap)
         table.add_row(
             name,
             f"{report.macro_f1:.4f}",
+            f"[{report.macro_f1_ci.low:.3f}, {report.macro_f1_ci.high:.3f}]"
+            if report.macro_f1_ci
+            else "--",
             f"{report.contrast_consistency:.4f}",
             f"{report.false_mismatch_rate:.4f}",
             f"{report.overconfident_rate:.4f}",
             f"{report.review_load:.4f}",
         )
     console.print(table)
+
+    if bootstrap:
+        names = list(predictions)
+        console.print(
+            f"\n[bold]Paired bootstrap[/bold] "
+            f"({bootstrap} resamples over contrast groups, not instances):"
+        )
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                a, b = names[i], names[j]
+                cmp = paired_bootstrap(
+                    instances, predictions[a], predictions[b], a, b, n_resamples=bootstrap
+                )
+                colour = "green" if cmp.significant else "yellow"
+                console.print(f"  [{colour}]{cmp}[/{colour}]")
 
 
 def _resolve(path: Path) -> Path:

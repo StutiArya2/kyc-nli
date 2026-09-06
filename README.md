@@ -95,14 +95,18 @@ beat: a transliteration-aware rule engine with the ICAO Doc 9303 tables, MRZ
 check digits, date-format normalisation, cross-field temporal rules and tuned
 fuzzy thresholds. Then the benchmark was generated at four OCR-noise levels.
 
-| OCR noise | `exact_match` macro-F1 | **`rule_engine` macro-F1** | contrast consistency | false-mismatch rate |
+| OCR noise | `exact_match` macro-F1 (95% CI) | **`rule_engine` macro-F1 (95% CI)** | contrast consistency | false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.371 | **0.980** | 0.952 | 0.000 |
-| light | 0.359 | **0.903** | 0.793 | 0.098 |
-| moderate | 0.353 | **0.831** | 0.652 | 0.133 |
-| heavy | 0.285 | **0.649** | 0.396 | 0.156 |
+| clean | 0.371 [0.345, 0.395] | **0.980** [0.969, 0.989] | 0.952 | 0.000 |
+| light | 0.359 [0.331, 0.384] | **0.903** [0.877, 0.925] | 0.793 | 0.098 |
+| moderate | 0.353 [0.327, 0.377] | **0.831** [0.798, 0.860] | 0.652 | 0.133 |
+| heavy | 0.285 [0.257, 0.312] | **0.649** [0.602, 0.694] | 0.396 | 0.156 |
 
-*(5 languages, 120 identities each, seed 20260906; reproduce with
+*(5 languages, 120 identities each, seed 20260906. Intervals are percentile
+bootstrap, 1000 resamples over **contrast groups** — not instances: members of a
+group share a premise, so resampling instances treats correlated observations as
+independent and yields intervals ~7% too narrow. Every pairwise difference is
+significant under a paired bootstrap. Reproduce with
 `scripts/run_noise_ablation.ps1`.)*
 
 **A rule engine gets 0.980 on clean input.** There is no room for a neural
@@ -208,6 +212,7 @@ the repo run on a clean checkout with zero downloads.
 | Full report for one system | `kyc-nli run-baseline rule_engine` |
 | Noise ablation (README table) | `scripts/run_noise_ablation.ps1` |
 | Test suite | `.venv/Scripts/python -m pytest` |
+| Rebuild the mid-review deck | `node scripts/build_midreview_deck.js` (needs `npm install pptxgenjs`) |
 | Regenerate the corrected Review 1 deck | `python scripts/fix_review1_citations.py "docs/proposal/NLP review 1.pptx" "docs/proposal/NLP review 1 (corrected).pptx"` |
 | Lint | `.venv/Scripts/ruff check src tests` |
 
@@ -247,6 +252,7 @@ results/          metrics + figures, gitignored except MANIFEST.md
 
 - [x] **M0** Schema, generator, MRZ encoder, transliteration engines, OCR noise model, rule baseline, evaluation harness
 - [x] Phase-0 pilot and go/no-go signal
+- [x] Bootstrap confidence intervals and paired significance testing
 - [ ] **M1** Calibrate the noise model against a real OCR engine on MIDV-2020 — *critical path*
 - [ ] **M2** Replace embedded name pools with Dakshina (covers all four non-English languages)
 - [ ] **M3** Fine-tuned mDeBERTa-v3-base cross-encoder (Colab/Kaggle GPU)
@@ -254,7 +260,6 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [ ] **M5** Human-labelled 500-instance validation subset, inter-annotator agreement
 - [ ] **M6** Ablations and error analysis
 - [ ] **M7** Write-up
-- [ ] Bootstrap confidence intervals (required before M3 results are reported)
 - [ ] TD1 (ID-card) MRZ support; currently TD3 passport only
 
 ## Citation

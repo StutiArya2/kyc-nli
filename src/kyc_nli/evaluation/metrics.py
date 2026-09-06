@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 
 from sklearn.metrics import classification_report, confusion_matrix
 
+from kyc_nli.evaluation.significance import Interval, bootstrap_macro_f1
 from kyc_nli.schema import Instance, Label, Prediction
 
 LABEL_ORDER: tuple[Label, ...] = (Label.ENTAILMENT, Label.CONTRADICTION, Label.NEUTRAL)
@@ -52,13 +53,25 @@ class EvaluationReport:
     false_mismatch_rate: float
     confusion: list[list[int]] = field(default_factory=list)
     review_load: float = 0.0
+    #: 95% bootstrap CI on macro-F1, resampled over contrast groups. None when
+    #: evaluate() was called with bootstrap=0. A macro-F1 reported without this
+    #: is an assertion, not a measurement -- see docs/evaluation-protocol.md.
+    macro_f1_ci: Interval | None = None
 
     def to_markdown(self) -> str:
         lines = [
             f"### {self.system}",
             "",
             f"- instances: {self.n_instances}",
-            f"- macro-F1: **{self.macro_f1:.4f}**",
+            (
+                f"- macro-F1: **{self.macro_f1:.4f}**"
+                + (
+                    f"  (95% CI [{self.macro_f1_ci.low:.4f}, {self.macro_f1_ci.high:.4f}], "
+                    f"{self.macro_f1_ci.n_resamples} resamples over contrast groups)"
+                    if self.macro_f1_ci
+                    else ""
+                )
+            ),
             f"- contrast-group consistency: **{self.contrast_consistency:.4f}** "
             f"({self.n_contrast_groups} groups)",
             f"- false-mismatch rate: {self.false_mismatch_rate:.4f}",
@@ -84,8 +97,16 @@ def evaluate(
     system: str,
     instances: list[Instance],
     predictions: list[Prediction],
+    bootstrap: int = 0,
+    seed: int = 20260906,
 ) -> EvaluationReport:
-    """Score ``predictions`` against the gold labels on ``instances``."""
+    """Score ``predictions`` against the gold labels on ``instances``.
+
+    ``bootstrap`` is the number of resamples used for the macro-F1 confidence
+    interval; 0 skips it. Pass ``DEFAULT_RESAMPLES`` for anything whose number
+    goes in a table -- a bare point estimate invites "is that difference real?"
+    with no answer.
+    """
     by_id = {p.instance_id: p for p in predictions}
     missing = [i.id for i in instances if i.id not in by_id]
     if missing:
@@ -163,6 +184,11 @@ def evaluate(
         false_mismatch_rate=false_mismatch,
         confusion=confusion_matrix(gold, pred, labels=labels).tolist(),
         review_load=review_load,
+        macro_f1_ci=(
+            bootstrap_macro_f1(instances, predictions, n_resamples=bootstrap, seed=seed)
+            if bootstrap
+            else None
+        ),
     )
 
 

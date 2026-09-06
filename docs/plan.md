@@ -20,12 +20,18 @@ normalisation, cross-field temporal rules and tuned fuzzy thresholds. Then the
 same synthetic benchmark was generated at four OCR-noise levels and both
 baselines were run on it.
 
-| OCR noise | exact match macro-F1 | **rule engine macro-F1** | rule contrast consistency | rule false-mismatch |
+| OCR noise | exact match macro-F1 (95% CI) | **rule engine macro-F1 (95% CI)** | rule contrast | rule false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.371 | **0.980** | 0.952 | 0.000 |
-| light | 0.359 | **0.903** | 0.793 | 0.098 |
-| moderate | 0.353 | **0.831** | 0.652 | 0.133 |
-| heavy | 0.285 | **0.649** | 0.396 | 0.156 |
+| clean | 0.371 [0.345, 0.395] | **0.980** [0.969, 0.989] | 0.952 | 0.000 |
+| light | 0.359 [0.331, 0.384] | **0.903** [0.877, 0.925] | 0.793 | 0.098 |
+| moderate | 0.353 [0.327, 0.377] | **0.831** [0.798, 0.860] | 0.652 | 0.133 |
+| heavy | 0.285 [0.257, 0.312] | **0.649** [0.602, 0.694] | 0.396 | 0.156 |
+
+Every pairwise difference is significant under a paired bootstrap: the rule
+engine beats exact matching by +0.608 [0.583, 0.636] on clean input and by
++0.364 [0.325, 0.407] under heavy noise. The gap *narrows* as noise rises, which
+is the finding restated — corruption costs the rule engine far more than it costs
+a method that was already failing.
 
 Read the first row. **On noise-free input the deterministic rule engine reaches
 0.980 macro-F1 and 0.952 contrast-group consistency.** There is roughly two
@@ -99,7 +105,7 @@ a fair proxy for real OCR. If it is not, the headline result is an artifact and
 a reviewer will say so.
 
 The go/no-go signal on the revised central claim is available at the end of
-Phase 1: if a fine-tuned model does not beat 0.831 macro-F1 at moderate noise
+Phase 1: if a fine-tuned model does not beat 0.831 macro-F1 (CI [0.798, 0.860]) at moderate noise
 *and* improve the risk–coverage curve, the claim is false.
 
 ---
@@ -129,7 +135,7 @@ of calibration is known.
 | Risk | Likelihood | Impact | Early warning | Mitigation | Fallback contribution |
 | --- | --- | --- | --- | --- | --- |
 | Noise model is not a fair proxy for real OCR | High | Fatal to headline | Measured CER on MIDV crops differs from the simulated rate by >2x | M1 calibration before any model training | Report the calibration itself: a per-script OCR error characterisation for identity documents is publishable on its own |
-| Neural model fails to beat the rule engine even under noise | Medium | Fatal to central claim | Dev macro-F1 below 0.83 after one training run | Hybrid: model only adjudicates instances the rule engine abstains on | Negative result plus the benchmark and the strong baseline — genuinely useful, and honest |
+| Neural model fails to beat the rule engine even under noise | Medium | Fatal to central claim | Dev macro-F1 inside the rule engine's CI after one training run | Hybrid: model only adjudicates instances the rule engine abstains on | Negative result plus the benchmark and the strong baseline — genuinely useful, and honest |
 | Synthetic benchmark dismissed as generator artifact | High | Major | Reviewer says "your model learned your noise model" | M2 real name data; M5 human validation; report cross-generator transfer | Position the benchmark as a diagnostic contrast set rather than a leaderboard |
 | No GPU access when needed | Medium | Schedule | Colab quota exhausted mid-run | Kaggle (30 GPU-hr/week) as second source; checkpoint every epoch | Smaller model; the claim does not depend on scale |
 | MIDV / Dakshina licensing blocks release | Medium | Moderate | Terms review at M1/M2 | Release annotations + generation code, not derived images | Code-and-protocol release, which is standard for this data situation |
