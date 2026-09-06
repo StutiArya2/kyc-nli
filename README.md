@@ -208,6 +208,7 @@ the repo run on a clean checkout with zero downloads.
 | Full report for one system | `kyc-nli run-baseline rule_engine` |
 | Noise ablation (README table) | `scripts/run_noise_ablation.ps1` |
 | Test suite | `.venv/Scripts/python -m pytest` |
+| Regenerate the corrected Review 1 deck | `python scripts/fix_review1_citations.py "docs/proposal/NLP review 1.pptx" "docs/proposal/NLP review 1 (corrected).pptx"` |
 | Lint | `.venv/Scripts/ruff check src tests` |
 
 Every number is reproducible from a config plus a seed. Results land in
@@ -223,7 +224,8 @@ docs/
   label-definitions.md    ground truth for annotation
   evaluation-protocol.md  frozen reporting protocol
   decisions/      numbered architecture decision records
-  proposal/       the Review 1 deck
+  proposal/       Review 1 deck, its corrected version, and the mid-review deck
+  literature/     citation-audit.md -- all 12 references checked against source
 notebooks/        exploratory only, numbered, outputs stripped
 src/kyc_nli/
   schema.py       the data model — start here
