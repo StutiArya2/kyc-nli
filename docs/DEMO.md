@@ -62,7 +62,22 @@ where *every* variant is right, and it is what separates real inference from
 noticing that two strings look similar.
 
 > *"Exact matching rejects 89% of genuine customers. The rule engine gets that
-> to 9% — but it does it by sending 63% of everything to a human."*
+> to 9% — but it does it by sending 63% of everything to a human. The model gets
+> the same job done sending 29%."*
+
+The row that carries the argument is **"sent to a human"** read next to
+**"whole-group correct"**:
+
+| | whole-group correct | sent to a human |
+| --- | --- | --- |
+| rule engine | 0.31 | 63% |
+| cross-encoder | 0.88 | 29% |
+
+Nearly three times the whole-group accuracy for less than half the human
+workload. Be straight about the one column where the model is *worse*: it
+rejects 16.7% of genuine customers against the rule engine's 9.3%. The rule
+engine buys that by abstaining instead of deciding — which is what the 63%
+review load costs.
 
 ### 5 — The finding
 The result that reframed the project. We built the strongest possible rulebook
@@ -100,11 +115,12 @@ the OCR error rates are measured from Tesseract across five scripts, not guessed
 | Tables wrap badly | Widen the window past 100 columns. |
 | "No benchmark on disk" | Harmless — it generates one on the spot, adds ~15s. |
 | Section 3 skipped | Dakshina not downloaded. Fine to skip; say the numbers instead. |
-| "cross_encoder is not trained yet" | Expected until training finishes. Sections 1–5 all still run. |
+| "cross_encoder is not trained yet" | Only if the checkpoint is missing. Sections 1–5 all still run without it. |
+| A wall of red PowerShell text | You ran `kyc-nli.exe` directly rather than `demo.ps1`. The model prints its load report to stderr and PowerShell treats that as an error; `demo.ps1` handles it. |
 
-**The demo never requires the neural model.** It shows the baselines and says the
-model is pending. That is deliberate: a demo that depends on a 9-hour training run
-finishing is a demo that fails in front of an audience.
+**The demo never requires the neural model.** If the checkpoint is missing it
+shows the baselines and says so. That is deliberate: a demo that depends on a
+long training run having finished is a demo that fails in front of an audience.
 
 ## Deeper dives, if asked
 

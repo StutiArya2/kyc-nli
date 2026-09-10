@@ -13,13 +13,23 @@ param(
     [int]$Bootstrap = 300
 )
 
-$ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
 $env:PYTHONIOENCODING = "utf-8"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+
+# transformers prints a weight-loading progress bar and a load report to stderr.
+# Two consequences, both fatal to a live demo and both handled here:
+#   * with $ErrorActionPreference = "Stop", PowerShell turns any native-command
+#     stderr into a terminating NativeCommandError -- the demo died on a
+#     progress bar. So the preference is deliberately NOT "Stop" here; the exit
+#     code is checked explicitly at the end instead.
+#   * the report itself is noise on a projector.
+$ErrorActionPreference = "Continue"
+$env:TRANSFORMERS_VERBOSITY = "error"
+$env:HF_HUB_DISABLE_PROGRESS_BARS = "1"
 
 $exe = Join-Path $root ".venv\Scripts\kyc-nli.exe"
 if (-not (Test-Path $exe)) {
@@ -34,4 +44,11 @@ if ($Host.UI.RawUI.WindowSize.Width -lt 100) {
     Write-Host ""
 }
 
-& $exe demo --step $Step --bootstrap $Bootstrap
+& $exe demo --step $Step --bootstrap $Bootstrap 2>$null
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "The demo exited with code $LASTEXITCODE. Re-run showing errors:" -ForegroundColor Yellow
+    Write-Host "  .\.venv\Scripts\kyc-nli.exe demo --step $Step --bootstrap $Bootstrap"
+    exit $LASTEXITCODE
+}
