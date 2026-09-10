@@ -24,6 +24,19 @@ $env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\kyc-nli.exe demo
 font size. The tables are drawn to fit the width they are given, and a narrow
 window wraps them into mush.
 
+### How long it takes, and where it pauses
+
+Sections 1, 2, 3 and 5 are instant. **Section 4 takes 1-2 minutes** — it is
+loading a 541 MB model and scoring every system for real. A spinner shows what
+it is doing, so it will not look frozen, but do not stand there in silence: that
+pause is the natural place to explain what "whole-group correct" means.
+
+It is slower while training is running, because both compete for the same CPU.
+
+The demo scores a seeded 300-instance sample rather than the full 1,050 split —
+same story, a fifth of the wait. `kyc-nli compare` scores everything if anyone
+asks for the full numbers; add `--sample 0` to the demo for the same.
+
 ## What the five sections say
 
 Run `.\demo.ps1 -Step N` to show one section on its own.

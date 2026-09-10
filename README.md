@@ -112,6 +112,11 @@ independent and yields intervals ~7% too narrow. Every pairwise difference is
 significant under a paired bootstrap. Reproduce with
 `scripts/run_noise_ablation.ps1`.)*
 
+**The trained model reaches 0.972 macro-F1** against the rule engine's 0.601 on
+the same held-out split, cutting human review load from 63% to 29% while
+*lowering* the false-rejection rate — [M3 findings](docs/m3-model-findings.md).
+That result exists because of what the baseline first showed:
+
 **A rule engine gets 0.981 on clean input.** There is no room for a neural
 contribution there. It degrades steeply under corruption — human review load
 rises from 29% to **85%** between clean and heavy, with the engine abstaining on
@@ -294,7 +299,7 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [ ] **M1b** Re-run Urdu in Nastaliq, and a second OCR engine, to separate font/engine limits from script difficulty
 - [x] **M2** Dakshina integrated — engines measured against human romanisations ([findings](docs/m2-dakshina-findings.md))
 - [ ] **M2b** A *name*-shaped corpus (Wikidata person labels); Dakshina is general vocabulary
-- [x] **M3a** Cross-encoder pipeline, leakage guards, and a fixed split bug ([findings](docs/m3-model-findings.md)) — clean-split training in progress
+- [x] **M3a** Cross-encoder trained and scored: **0.972 macro-F1** vs the rule engine's 0.601, review load 63% → 29% ([findings](docs/m3-model-findings.md))
 - [ ] **M3b** The GPU run — XLM-R via [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb)
 - [ ] **M4** Selective-prediction analysis: risk–coverage, review-load reduction
 - [ ] **M5** Human-labelled 500-instance validation subset, inter-annotator agreement

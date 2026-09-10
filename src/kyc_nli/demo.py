@@ -11,6 +11,8 @@ here is hardcoded output; if a number on screen is wrong, the system is wrong.
 
 from __future__ import annotations
 
+import random
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -37,7 +39,15 @@ def _rule(title: str, number: int) -> None:
     console.print()
 
 
-def _load(dataset: str | None) -> list[Instance]:
+#: Instances scored in the demo. The full test split is ~1050, and scoring the
+#: cross-encoder over all of it on a CPU takes about six minutes -- far too long
+#: to stand in front of. 300 reproduces the same ordering and the same story at
+#: a fifth of the cost, and the sample is seeded so the demo is repeatable.
+#: `kyc-nli compare` still scores everything; this shortcut is for the room.
+DEMO_SAMPLE = 300
+
+
+def _load(dataset: str | None, sample: int = DEMO_SAMPLE) -> list[Instance]:
     """The test split if it exists, otherwise a small set generated on the spot.
 
     A demo that requires a prior setup step is a demo that fails in front of an
@@ -45,12 +55,38 @@ def _load(dataset: str | None) -> list[Instance]:
     """
     path = repo_root() / (dataset or "data/processed/synth_v0.test.jsonl")
     if path.exists():
-        return load_instances(path)
-    console.print("[dim]No benchmark on disk; generating a small one...[/dim]")
-    config = GeneratorConfig(
-        languages=tuple(load_languages()), identities_per_language=40, seed=20260906
-    )
-    return split_by_identity(InstanceGenerator(config).generate())["test"]
+        instances = load_instances(path)
+    else:
+        console.print("[dim]No benchmark on disk; generating a small one...[/dim]")
+        config = GeneratorConfig(
+            languages=tuple(load_languages()), identities_per_language=40, seed=20260906
+        )
+        instances = split_by_identity(InstanceGenerator(config).generate())["test"]
+    return _subsample(instances, sample)
+
+
+def _subsample(instances: list[Instance], sample: int) -> list[Instance]:
+    """A seeded, language-stratified sample.
+
+    Stratified because an unbalanced draw would make the per-language story wrong,
+    and whole contrast groups are kept together because the whole-group metric is
+    meaningless if a group is only half present.
+    """
+    if not sample or len(instances) <= sample:
+        return instances
+    by_language: dict[str, list[str]] = {}
+    for inst in instances:
+        key = inst.contrast_group_id or inst.id
+        by_language.setdefault(inst.language, [])
+        if key not in by_language[inst.language]:
+            by_language[inst.language].append(key)
+
+    rng = random.Random(20260906)
+    keep: set[str] = set()
+    per_language = max(1, sample // (len(by_language) or 1) // 3)
+    for groups in by_language.values():
+        keep.update(rng.sample(groups, min(per_language, len(groups))))
+    return [i for i in instances if (i.contrast_group_id or i.id) in keep]
 
 
 # --------------------------------------------------------------------------
@@ -199,10 +235,11 @@ def show_scoreboard(instances: list[Instance], bootstrap: int) -> None:
     systems: dict[str, object] = {}
     model_note = None
     for name, cls in available_systems().items():
-        try:
-            systems[name] = cls()
-        except Exception as exc:  # untrained checkpoint, or missing extra
-            model_note = f"{name}: {str(exc).splitlines()[0]}"
+        with console.status(f"[dim]loading {name}...[/dim]", spinner="dots"):
+            try:
+                systems[name] = cls()
+            except Exception as exc:  # untrained checkpoint, or missing extra
+                model_note = f"{name}: {str(exc).splitlines()[0]}"
     if "cross_encoder" not in systems:
         model_note = model_note or (
             "cross_encoder is not trained yet — run scripts/train_cross_encoder.py"
@@ -220,13 +257,20 @@ def show_scoreboard(instances: list[Instance], bootstrap: int) -> None:
 
     preds: dict[str, list] = {}
     for name, system in systems.items():
-        p = (
-            system.predict_all(instances)
-            if hasattr(system, "predict_all")
-            else [system.predict(i) for i in instances]
-        )
-        preds[name] = p
-        r = evaluate(name, instances, p, bootstrap=bootstrap)
+        # Progress matters more here than anywhere else in the demo. Scoring the
+        # cross-encoder on CPU takes minutes, and a silent pause of that length
+        # in front of a room is indistinguishable from a crash -- the first live
+        # run looked frozen for nearly six.
+        with console.status(
+            f"[dim]scoring {name} on {len(instances)} instances...[/dim]", spinner="dots"
+        ):
+            p = (
+                system.predict_all(instances)
+                if hasattr(system, "predict_all")
+                else [system.predict(i) for i in instances]
+            )
+            preds[name] = p
+            r = evaluate(name, instances, p, bootstrap=bootstrap)
         ci = (
             f"  [{r.macro_f1_ci.low:.3f}, {r.macro_f1_ci.high:.3f}]" if r.macro_f1_ci else ""
         )
@@ -293,7 +337,12 @@ def show_finding() -> None:
     )
 
 
-def run(dataset: str | None = None, bootstrap: int = 300, only: int = 0) -> None:
+def run(
+    dataset: str | None = None,
+    bootstrap: int = 300,
+    only: int = 0,
+    sample: int = DEMO_SAMPLE,
+) -> None:
     """The whole walkthrough, or one section of it."""
     console.print(
         Panel.fit(
@@ -303,8 +352,11 @@ def run(dataset: str | None = None, bootstrap: int = 300, only: int = 0) -> None
             border_style="cyan",
         )
     )
-    instances = _load(dataset)
-    console.print(f"[dim]Benchmark: {len(instances)} held-out instances.[/dim]")
+    instances = _load(dataset, sample)
+    console.print(
+        f"[dim]Benchmark: {len(instances)} held-out instances "
+        f"(seeded sample; `kyc-nli compare` scores the full split).[/dim]"
+    )
 
     steps = (
         (1, lambda: show_problem(instances)),

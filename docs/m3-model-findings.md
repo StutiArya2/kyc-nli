@@ -1,11 +1,16 @@
 # M3 — The cross-encoder, and the split bug it exposed
 
-**Date:** 2026-09-07 · **Status:** pipeline complete; clean-split training in
-progress · **Reproduce:** `python scripts/train_cross_encoder.py`
+**Date:** 2026-09-10 · **Status:** complete (CPU run). GPU run M3b outstanding · **Reproduce:** `python scripts/train_cross_encoder.py`
 
-The headline of this milestone so far is not a model score. It is a data-splitting
-bug that made the first score meaningless, and would have made every subsequent
-one meaningless too.
+**The result:** the cross-encoder reaches **0.972 macro-F1** against the rule
+engine's 0.601, cuts human review load from 63% to 29%, and *lowers* the
+false-rejection rate while doing it. The project's revised claim is met.
+[Jump to the numbers](#the-result).
+
+**Read the next section first anyway.** The first version of that result was
+0.989, and it was meaningless — a data-splitting bug had put 94% of the test
+identities into training. The number that survives is the one measured after the
+fix, and the bug is more instructive than the score.
 
 ---
 
@@ -139,20 +144,87 @@ estimated.** That estimate was 4.5x optimistic and the plan should not repeat it
 
 ---
 
+## The result
+
+Trained on the corrected identity-level split, with the M1 measured noise model.
+`distilbert-base-multilingual-cased`, embeddings frozen, 2 epochs, 136 minutes on
+a 4-thread CPU. Scored on 1,050 held-out instances from 150 identities that never
+appear in training.
+
+| system | macro-F1 (95% CI) | whole-group correct | genuine customers rejected | sent to a human |
+| --- | --- | --- | --- | --- |
+| exact match | 0.268 [0.248, 0.287] | 0.000 | 89.3% | 0% |
+| rule engine | 0.601 [0.565, 0.640] | 0.307 | 9.3% | 63.4% |
+| **cross-encoder** | **0.972** [0.962, 0.982] | **0.936** | **5.7%** | **28.6%** |
+
+Paired bootstrap, 1000 resamples over contrast groups:
+**model − rule engine = +0.371 [0.329, 0.409], significant.**
+
+**The model is better on every axis simultaneously**, which was not guaranteed and
+did not happen at epoch 1. After one epoch it beat the rule engine on macro-F1
+(0.949) but *rejected more genuine customers* than the rule engine did (16.7% vs
+9.3%) — it had bought accuracy by being willing to decide. The second epoch closed
+that: 5.7%, now better than the baseline, while still halving the review load.
+
+That is the project's revised claim, met:
+
+> Under OCR corruption, a learned entailment model recovers decisions a
+> transliteration-aware rule engine must abstain on — reducing human review load
+> at equal or better error rate.
+
+Review load 63.4% → 28.6%, and the error rate went *down*, not merely held.
+
+### Where it is still wrong, and where that is suspicious
+
+| class | F1 | | language | macro-F1 |
+| --- | --- | --- | --- | --- |
+| entailment | 0.950 | | English | 0.982 |
+| contradiction | 0.967 | | Hindi | 0.982 |
+| **neutral** | **1.000** | | Bengali | 0.977 |
+| | | | Tamil | 0.972 |
+| | | | **Urdu** | **0.949** |
+
+| phenomenon | accuracy |
+| --- | --- |
+| cross_script_name_alt_romanisation | **0.839** |
+| cross_script_name_mismatch | 0.913 |
+| cross_script_name_icao | 0.915 |
+| everything else (5 phenomena) | 1.000 |
+
+Two things to read here, and one to be sceptical of.
+
+**The residual error is concentrated exactly where it should be.** The three
+cross-script name phenomena are the hard ones and carry every mistake; the five
+structural phenomena are perfect. A model that had learned only the temporal
+rules would show the opposite pattern, and that is the failure this breakdown
+exists to catch. Urdu is the weakest language, consistent with M1 measuring
+Tesseract failing on it hardest and M2 measuring it as the most one-to-many.
+
+**NEUTRAL F1 of 1.000 is a property of the benchmark, not an achievement.**
+Say this before a reviewer does. NEUTRAL instances are constructed by *removing*
+or *destroying* evidence, so the serialised premise shows the field missing or
+marked `?`. Detecting that is a surface pattern, and the rule engine also scores
+1.000 on both NEUTRAL phenomena. It confirms the generator does what
+[decision 0002](decisions/0002-neutral-is-evidence-insufficiency.md) says, and
+nothing more. A NEUTRAL class that required real judgement would need human
+annotation — milestone M5.
+
+Earlier in this milestone, NEUTRAL F1 of 1.000 was the tell that exposed the
+split leak. It is not that here — the split is verified leak-free and the other
+classes sit at 0.95-0.97 rather than at ceiling — but it is the same number, and
+it deserves the same scepticism every time it appears.
+
 ## Status and what remains
 
-Training on the corrected split is running. Until it finishes there is **no valid
-model number for this project**, and the invalid one must not be quoted.
 
 Still open:
 
 - **The GPU run (M3b).** XLM-R rather than a distilled model, embeddings
   unfrozen, ~10 minutes on a free Colab T4. `notebooks/m3_colab.ipynb`. A
   distilled CPU model is a floor, not a ceiling.
-- **The result that actually matters is not macro-F1.** The revised claim is
-  about recovering decisions the rule engine abstains on. The number to report is
-  **review load at a fixed error rate**, and the shape is the risk–coverage
-  curve. M1 measured the rule engine abstaining on 49% of decidable cases at
-  moderate noise; that is the work available to recover.
-- **Per-phenomenon and contrast consistency, not the headline.** A model that
-  wins only on the temporal cases has learned a rule engine.
+- **The risk–coverage curve**, which is the proper shape of the selective-
+  prediction claim. We have review load at the model's own operating point
+  (28.6%); we do not yet have the curve across operating points.
+- **Everything here is still synthetic.** Real romanisations (M2) and real OCR
+  rates (M1) feed the generator, but no real identity document does, and no human
+  has annotated a single label. M5 remains the honest limit on all of this.

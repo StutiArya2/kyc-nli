@@ -125,7 +125,7 @@ Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) 
 | M1b | Urdu in Nastaliq rather than Naskh, and a second OCR engine, to separate font and engine limits from script difficulty | corrected Urdu rates | M1 |
 | M2 | ✅ Dakshina integrated. Used to *measure* the engines rather than to replace the pools — it is general vocabulary, not names. Premise quantified; two engine bugs fixed. | `docs/m2-dakshina-findings.md`, `kyc-nli translit-eval` | — |
 | M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |
-| M3a | Cross-encoder pipeline, leakage guards, CLI integration. **Found and fixed a split bug that put 94% of test identities into training** ([findings](m3-model-findings.md)) | `src/kyc_nli/nli/`, `docs/m3-model-findings.md` | M2 |
+| M3a | ✅ Cross-encoder trained and scored: **0.972 macro-F1** vs 0.601, review load 63%→29%, false rejection 9.3%→5.7%. Also found and fixed a split bug that had put 94% of test identities into training. | `docs/m3-model-findings.md` | M2 |
 | M3b | The GPU run: XLM-R, embeddings unfrozen, `notebooks/m3_colab.ipynb` | checkpoint + results table | M3a |
 | M4 | Selective-prediction analysis | risk–coverage curves, review-load-at-fixed-error table | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |

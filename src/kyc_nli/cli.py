@@ -430,6 +430,10 @@ def demo(
     ),
     bootstrap: int = typer.Option(300, help="Resamples for the live CIs. 0 is faster."),
     step: int = typer.Option(0, help="Show only section 1-5. 0 shows all."),
+    sample: int = typer.Option(
+        demo_module.DEMO_SAMPLE,
+        help="Instances to score. 0 uses the full split (minutes on CPU).",
+    ),
 ) -> None:
     """Run the presentation walkthrough. One command, about a minute.
 
@@ -438,7 +442,10 @@ def demo(
     of an audience. Every number on screen is computed at the moment it appears.
     """
     demo_module.run(
-        dataset=str(dataset) if dataset else None, bootstrap=bootstrap, only=step
+        dataset=str(dataset) if dataset else None,
+        bootstrap=bootstrap,
+        only=step,
+        sample=sample,
     )
 
 

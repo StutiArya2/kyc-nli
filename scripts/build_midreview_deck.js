@@ -92,7 +92,7 @@ function footer(s, text) {
     x: 0.9, y: 4.65, w: 9, h: 0.35, isTextBox: true, margin: 0,
     fontFace: BODY, fontSize: 14, color: SAND,
   });
-  s.addText("Five Indian scripts  ·  Working system  ·  First empirical results", {
+  s.addText("Five Indian scripts  ·  0.972 macro-F1 vs a 0.601 baseline  ·  Review load halved", {
     x: 0.9, y: 5.05, w: 9, h: 0.35, isTextBox: true, margin: 0,
     fontFace: BODY, fontSize: 13, italic: true, color: SAFFRON,
   });
@@ -101,7 +101,7 @@ function footer(s, text) {
     x: 9.9, y: 2.8, w: 2.5, h: 0.85, isTextBox: true, margin: 0,
     fontFace: BODY, fontSize: 10, color: SAND, align: "center", lineSpacing: 13,
   });
-  s.addNotes("Mid-review. Headline: a working system, a real empirical result with confidence intervals, and a reframed central claim.");
+  s.addNotes("Mid-review. Headline: the claim is met — 0.972 against a deliberately strong 0.601 baseline, on a leak-free split, with measured noise. Lead with the baseline story, not the model score: the baseline is why the score means anything.");
 }
 
 // =================================================== 2. SINCE REVIEW 1
@@ -120,7 +120,7 @@ function footer(s, text) {
     ["No methodology", "Reproducible protocol, frozen and documented"],
     ["No data", "7,000-instance benchmark, 5 scripts"],
     ["No code", "Running system, 91 passing tests"],
-    ["No results", "4 measured noise levels × 2 baselines × 5 languages, with CIs"],
+    ["No results", "Model at 0.972 vs a 0.601 baseline, with CIs and a paired test"],
   ];
   const y0 = 2.0, rh = 0.52;
   rows.forEach((r, i) => {
@@ -176,7 +176,7 @@ function footer(s, text) {
     });
     y += 0.56;
   });
-  footer(s, "The neural model's pipeline is built and its training is running; there is deliberately no model number yet — see slide 7 for why that ordering was the right one.");
+  footer(s, "The model was built LAST, on purpose: only after a deliberately strong baseline showed where there was anything to win. Slide 7 is why.");
   s.addNotes("This is the 'something that works' slide. Everything listed runs on a laptop CPU in seconds.");
 }
 
@@ -422,10 +422,10 @@ function footer(s, text) {
   });
 
   const why = [
-    ["Falsifiable", "Stands or falls on the risk–coverage curve, with the rule engine's CI as the bar to clear."],
+    ["Met", "0.972 vs 0.601 macro-F1, +0.371 [0.329, 0.409] paired, significant. Review load 63% -> 29%."],
     ["Strong baseline", "The thing to beat is already built, already published in the repo, and hard."],
     ["Untouched by prior work", "Selective prediction under input corruption is not what the ID-verification literature does."],
-    ["Operationally meaningful", "Review load is what a KYC team actually pays for."],
+    ["Operationally meaningful", "Review load is what a KYC team pays for — and false rejection FELL, 9.3% -> 5.7%."],
   ];
   why.forEach(([h, d], i) => {
     const x = 0.9 + (i % 2) * 5.75;
@@ -593,9 +593,9 @@ function footer(s, text) {
   });
 
   const closing = [
-    ["What we can defend today", "A working system, a 7,000-instance benchmark across five Indian scripts, a strong baseline, and a reproducible protocol."],
+    ["What we can defend today", "A model at 0.972 against a deliberately strong 0.601 baseline, on a leak-free split, with measured noise and human romanisations."],
     ["What we learned", "The original framing does not survive contact with a good baseline. The revised one is sharper and falsifiable."],
-    ["What comes next", "Calibrate the noise model, swap in Dakshina, then train."],
+    ["What comes next", "The GPU run, the risk-coverage curve, and human-annotated labels — the honest limit is still that no real document has been touched."],
   ];
   let cy = 4.4;
   closing.forEach(([h, d]) => {

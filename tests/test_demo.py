@@ -85,8 +85,42 @@ def test_problem_section_shows_the_printed_name_not_the_ocr_damage(instances, ca
 
 
 def test_run_accepts_a_single_step(instances, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(demo, "_load", lambda dataset: instances)
+    monkeypatch.setattr(demo, "_load", lambda dataset, sample=0: instances)
     demo.run(bootstrap=0, only=5)
     out = capsys.readouterr().out
     assert "changed the project" in out
     assert "Three answers" not in out
+
+
+def test_subsample_keeps_every_language_and_whole_groups(instances) -> None:
+    """The demo scores a sample, so the sample must not distort the story.
+
+    Scoring the cross-encoder over the full split takes ~6 minutes on a CPU,
+    which is far too long to stand in front of. Sampling is the fix, but an
+    unbalanced draw would make the per-language claim wrong, and a half-present
+    contrast group would make the whole-group metric meaningless.
+    """
+    # Smaller than the fixture's split, or _subsample is correctly a no-op.
+    sample = demo._subsample(instances, 15)
+    assert 0 < len(sample) < len(instances)
+    assert {i.language for i in sample} == {i.language for i in instances}
+
+    # Any group that survives must survive intact.
+    from collections import Counter
+
+    full = Counter(i.contrast_group_id for i in instances if i.contrast_group_id)
+    kept = Counter(i.contrast_group_id for i in sample if i.contrast_group_id)
+    for group, n in kept.items():
+        assert n == full[group], f"contrast group {group} was split by sampling"
+
+
+def test_subsample_is_deterministic(instances) -> None:
+    """A demo that shows different numbers each run invites the wrong question."""
+    a = [i.id for i in demo._subsample(instances, 15)]
+    b = [i.id for i in demo._subsample(instances, 15)]
+    assert a == b
+
+
+def test_subsample_is_a_noop_when_it_would_not_shrink(instances) -> None:
+    assert demo._subsample(instances, 0) is instances
+    assert demo._subsample(instances, len(instances) + 1) is instances
