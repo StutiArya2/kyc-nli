@@ -22,14 +22,14 @@ baselines were run on it.
 
 | OCR noise | exact match macro-F1 (95% CI) | **rule engine macro-F1 (95% CI)** | rule contrast | rule false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.371 [0.345, 0.395] | **0.980** [0.969, 0.989] | 0.952 | 0.000 |
-| light | 0.359 [0.331, 0.384] | **0.903** [0.877, 0.925] | 0.793 | 0.098 |
-| moderate | 0.353 [0.327, 0.377] | **0.831** [0.798, 0.860] | 0.652 | 0.133 |
-| heavy | 0.285 [0.257, 0.312] | **0.649** [0.602, 0.694] | 0.396 | 0.156 |
+| clean | 0.368 [0.341, 0.392] | **0.981** [0.971, 0.991] | 0.956 | 0.000 |
+| light | 0.354 [0.326, 0.380] | **0.920** [0.900, 0.938] | 0.815 | 0.075 |
+| moderate | 0.252 [0.231, 0.275] | **0.597** [0.552, 0.644] | 0.333 | 0.087 |
+| heavy | 0.219 [0.206, 0.235] | **0.361** [0.315, 0.404] | 0.074 | 0.029 |
 
 Every pairwise difference is significant under a paired bootstrap: the rule
-engine beats exact matching by +0.608 [0.583, 0.636] on clean input and by
-+0.364 [0.325, 0.407] under heavy noise. The gap *narrows* as noise rises, which
+engine beats exact matching by +0.613 [0.588, 0.643] on clean input and by
++0.142 [0.099, 0.185] under heavy noise. The gap *narrows* as noise rises, which
 is the finding restated — corruption costs the rule engine far more than it costs
 a method that was already failing.
 
@@ -88,6 +88,7 @@ task, because every headline number depends on it. Tracked as
    |
    v
 Phase 0.5  calibrate the noise model against a real OCR engine   <-- SINGLE POINT OF FAILURE
+           (render-based; MIDV-2020 cannot cover 4 of 5 scripts -- decision 0006)
    |
    v
 Phase 1  fine-tune XLM-R / mDeBERTa on Colab; beat the rule engine at moderate+ noise
@@ -99,13 +100,18 @@ Phase 1  fine-tune XLM-R / mDeBERTa on Colab; beat the rule engine at moderate+ 
 Phase 3  ablations, error analysis, write-up
 ```
 
-**The single task whose slippage sinks the timeline is noise-model
-calibration.** Every number in the paper is conditional on the noise model being
-a fair proxy for real OCR. If it is not, the headline result is an artifact and
-a reviewer will say so.
+**The single task whose slippage sinks the timeline was noise-model calibration,
+and it is now done.** It was worth the priority: the hand-built model had the
+wrong *shape*, not merely the wrong magnitude, and correcting it moved the rule
+engine from 0.831 to 0.597 macro-F1 at moderate noise. The headroom the project
+is aiming at is roughly twice what we had been claiming.
+
+The residual risk is smaller but real: rendered text is a lower bound on
+real-document degradation, so the measured rates understate reality by an unknown
+factor. M1b narrows that.
 
 The go/no-go signal on the revised central claim is available at the end of
-Phase 1: if a fine-tuned model does not beat 0.831 macro-F1 (CI [0.798, 0.860]) at moderate noise
+Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) at moderate noise
 *and* improve the risk–coverage curve, the claim is false.
 
 ---
@@ -115,9 +121,12 @@ Phase 1: if a fine-tuned model does not beat 0.831 macro-F1 (CI [0.798, 0.860]) 
 | # | Milestone | Output | Depends on |
 | --- | --- | --- | --- |
 | M0 | Repo, schema, generator, rule baseline, eval harness | ✅ this commit | — |
-| M1 | Noise-model calibration vs. Tesseract/EasyOCR on MIDV-2020 crops | per-script CER + confusion matrices replacing the hand-built tables | MIDV-2020 access |
-| M2 | Real name data: Dakshina replacing embedded pools — one CC BY-SA 4.0 download covers hi, ta, bn and ur | `data/external/` loaders + regenerated benchmark | M1 |
-| M3 | Fine-tuned mDeBERTa-v3-base cross-encoder on Colab | `src/kyc_nli/nli/` + checkpoint + results table | M2 |
+| M1 | ✅ Noise-model calibration DONE. **Not on MIDV-2020** — it contains no Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four of five languages ([decision 0006](decisions/0006-ocr-calibration.md)). Render-based instead: HarfBuzz shaping + Tesseract + alignment. The hand-built model had deletion 10-17x too low; measured rates now live in `kyc_nli.ocr.measured`. | `docs/m1-ocr-calibration-findings.md` | — |
+| M1b | Urdu in Nastaliq rather than Naskh, and a second OCR engine, to separate font and engine limits from script difficulty | corrected Urdu rates | M1 |
+| M2 | ✅ Dakshina integrated. Used to *measure* the engines rather than to replace the pools — it is general vocabulary, not names. Premise quantified; two engine bugs fixed. | `docs/m2-dakshina-findings.md`, `kyc-nli translit-eval` | — |
+| M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |
+| M3a | Cross-encoder pipeline, leakage guards, CLI integration. **Found and fixed a split bug that put 94% of test identities into training** ([findings](m3-model-findings.md)) | `src/kyc_nli/nli/`, `docs/m3-model-findings.md` | M2 |
+| M3b | The GPU run: XLM-R, embeddings unfrozen, `notebooks/m3_colab.ipynb` | checkpoint + results table | M3a |
 | M4 | Selective-prediction analysis | risk–coverage curves, review-load-at-fixed-error table | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |
 | M6 | Ablations + error analysis | per-phenomenon, per-language, per-noise-level tables | M3 |
@@ -134,7 +143,7 @@ of calibration is known.
 
 | Risk | Likelihood | Impact | Early warning | Mitigation | Fallback contribution |
 | --- | --- | --- | --- | --- | --- |
-| Noise model is not a fair proxy for real OCR | High | Fatal to headline | Measured CER on MIDV crops differs from the simulated rate by >2x | M1 calibration before any model training | Report the calibration itself: a per-script OCR error characterisation for identity documents is publishable on its own |
+| Measured rates understate real documents | Medium | Moderate | A real-document spot check differs from rendered by >2x | M1 done; rendered text is a stated LOWER BOUND. M1b adds a second engine and a real-document correction factor | Report the calibration itself: a per-script OCR error characterisation for identity documents is publishable on its own |
 | Neural model fails to beat the rule engine even under noise | Medium | Fatal to central claim | Dev macro-F1 inside the rule engine's CI after one training run | Hybrid: model only adjudicates instances the rule engine abstains on | Negative result plus the benchmark and the strong baseline — genuinely useful, and honest |
 | Synthetic benchmark dismissed as generator artifact | High | Major | Reviewer says "your model learned your noise model" | M2 real name data; M5 human validation; report cross-generator transfer | Position the benchmark as a diagnostic contrast set rather than a leaderboard |
 | No GPU access when needed | Medium | Schedule | Colab quota exhausted mid-run | Kaggle (30 GPU-hr/week) as second source; checkpoint every epoch | Smaller model; the claim does not depend on scale |

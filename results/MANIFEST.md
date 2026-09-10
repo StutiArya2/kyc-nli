@@ -8,6 +8,8 @@
 | `rule_engine.md` / `.json` | `kyc-nli run-baseline rule_engine` | no |
 | `exact_match.md` / `.json` | `kyc-nli run-baseline exact_match` | no |
 | noise ablation (stdout) | `scripts/run_noise_ablation.ps1` | no — the table lives in `docs/plan.md` |
+| `ocr-calibration.md` | `kyc-nli calibrate-ocr` | no — analysis lives in `docs/m1-ocr-calibration-findings.md` |
+| `transliteration.md` | `kyc-nli translit-eval` | no — analysis lives in `docs/m2-dakshina-findings.md` |
 
 ## Phase-0 headline, 2026-09-06
 
@@ -15,9 +17,9 @@
 
 | OCR noise | exact_match macro-F1 (95% CI) | rule_engine macro-F1 (95% CI) | rule contrast | rule false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.371 [0.345, 0.395] | 0.980 [0.969, 0.989] | 0.952 | 0.000 |
-| light | 0.359 [0.331, 0.384] | 0.903 [0.877, 0.925] | 0.793 | 0.098 |
-| moderate | 0.353 [0.327, 0.377] | 0.831 [0.798, 0.860] | 0.652 | 0.133 |
-| heavy | 0.285 [0.257, 0.312] | 0.649 [0.602, 0.694] | 0.396 | 0.156 |
+| clean | 0.368 [0.341, 0.392] | 0.981 [0.971, 0.991] | 0.956 | 0.000 |
+| light | 0.354 [0.326, 0.380] | 0.920 [0.900, 0.938] | 0.815 | 0.075 |
+| moderate | 0.252 [0.231, 0.275] | 0.597 [0.552, 0.644] | 0.333 | 0.087 |
+| heavy | 0.219 [0.206, 0.235] | 0.361 [0.315, 0.404] | 0.074 | 0.029 |
 
 Interpretation and caveats: `docs/plan.md`.

@@ -126,9 +126,18 @@ ICAO_ARABIC: dict[str, str] = {
     "ض": "D", "ط": "T", "ظ": "Z", "ع": "E", "غ": "G", "ف": "F", "ق": "Q",
     "ك": "K", "ل": "L", "م": "M", "ن": "N", "ه": "H", "و": "W", "ي": "Y",
     "ى": "Y",
-    # UNVERIFIED against Doc 9303 -- hamza carriers and ta marbuta use ICAO
-    # X-prefixed codes whose exact form must be confirmed before publication.
-    "ء": "XE", "آ": "XAA", "أ": "A", "إ": "I", "ؤ": "U", "ئ": "Y", "ة": "H",
+    # Hamza carriers and ta marbuta.
+    #
+    # ICAO Doc 9303 encodes these with X-prefixed codes (XE, XAA, ...). Those
+    # are MRZ *encoding* artifacts, not romanisations: no human writing their
+    # own name in Latin script has ever written XAA. Measured against Dakshina,
+    # emitting the X-codes made the Urdu engine miss essentially every human
+    # romanisation -- آئرلینڈ became XAAYRLYND where people wrote IRELAND.
+    #
+    # So this table gives the *human* rendering. If MRZ-exact ICAO output is
+    # ever needed (for generating a conformant MRZ rather than matching a form),
+    # add a separate table rather than changing this one back.
+    "ء": "", "آ": "AA", "أ": "A", "إ": "I", "ؤ": "U", "ئ": "Y", "ة": "H",
     # Diacritics (harakat). OCR drops these routinely; ICAO omits them.
     "ً": "", "ٌ": "", "ٍ": "", "َ": "", "ُ": "",
     "ِ": "", "ّ": "", "ْ": "", "ـ": "",

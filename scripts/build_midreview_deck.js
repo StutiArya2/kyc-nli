@@ -119,8 +119,8 @@ function footer(s, text) {
     ["Claimed 6 contributions", "2 tested against a strong baseline"],
     ["No methodology", "Reproducible protocol, frozen and documented"],
     ["No data", "7,000-instance benchmark, 5 scripts"],
-    ["No code", "Running system, 40 passing tests"],
-    ["No results", "4 noise levels × 2 baselines × 5 languages, with CIs"],
+    ["No code", "Running system, 91 passing tests"],
+    ["No results", "4 measured noise levels × 2 baselines × 5 languages, with CIs"],
   ];
   const y0 = 2.0, rh = 0.52;
   rows.forEach((r, i) => {
@@ -149,14 +149,14 @@ function footer(s, text) {
   const s = lightSlide("What is built and running today", "The system");
 
   statCard(s, 0.6, 1.55, 2.85, "7,000", "labelled instances\nacross 5 scripts", INK);
-  statCard(s, 3.65, 1.55, 2.85, "40", "tests passing\nlint clean", ENTAIL);
+  statCard(s, 3.65, 1.55, 2.85, "91", "tests passing\nlint clean", ENTAIL);
   statCard(s, 6.7, 1.55, 2.85, "5", "Indian languages\n5 distinct scripts", INK);
   statCard(s, 9.75, 1.55, 2.95, "0", "real identity records\nused, by construction", ENTAIL);
 
   const mods = [
     ["Task schema", "Premise = multi-zone field observations. Hypothesis = one claim. Label = E / C / N."],
     ["Transliteration engines", "Devanagari, Tamil, Bengali, Perso-Arabic. Each returns a variant SET, not one string."],
-    ["OCR noise model", "Script-aware corruption: matra loss, dot loss, homoglyphs. Four graded levels, not yet calibrated."],
+    ["OCR noise model", "Rates MEASURED from Tesseract across 5 scripts and 4 capture conditions (M1)."],
     ["Benchmark generator", "Minimal-pair contrast groups. Reproducible from a config plus a seed."],
     ["Rule baseline", "ICAO tables, MRZ check digits, cross-field temporal rules, tuned fuzzy match."],
     ["Evaluation harness", "Macro-F1 with bootstrap CIs, paired significance testing, per-language, per-phenomenon."],
@@ -176,7 +176,7 @@ function footer(s, text) {
     });
     y += 0.56;
   });
-  footer(s, "Not yet implemented: the neural NLI model. Deliberately — see slide 7.");
+  footer(s, "The neural model's pipeline is built and its training is running; there is deliberately no model number yet — see slide 7 for why that ordering was the right one.");
   s.addNotes("This is the 'something that works' slide. Everything listed runs on a laptop CPU in seconds.");
 }
 
@@ -332,11 +332,11 @@ function footer(s, text) {
   const s = lightSlide("The result that reframes the project", "Finding");
 
   s.addChart(pres.ChartType.line, [
-    { name: "Rule engine", labels: ["clean", "light", "moderate", "heavy"], values: [0.980, 0.903, 0.831, 0.649] },
-    { name: "Exact match (incumbent)", labels: ["clean", "light", "moderate", "heavy"], values: [0.371, 0.359, 0.353, 0.285] },
+    { name: "Rule engine", labels: ["clean", "light", "moderate", "heavy"], values: [0.981, 0.920, 0.597, 0.361] },
+    { name: "Exact match (incumbent)", labels: ["clean", "light", "moderate", "heavy"], values: [0.368, 0.354, 0.252, 0.219] },
   ], {
     x: 0.6, y: 1.5, w: 7.4, h: 4.3,
-    showTitle: true, title: "Macro-F1 vs OCR noise level", titleFontSize: 14,
+    showTitle: true, title: "Macro-F1 vs OCR noise (rates MEASURED from Tesseract)", titleFontSize: 13,
     titleColor: INK, titleFontFace: BODY,
     chartColors: [INK, CONTRA],
     lineDataSymbol: "circle", lineDataSymbolSize: 7, lineSize: 3,
@@ -354,7 +354,7 @@ function footer(s, text) {
     x: 8.3, y: 1.5, w: 4.4, h: 1.75, rectRadius: 0.06,
     fill: { color: INK }, line: { color: INK },
   });
-  s.addText("0.980", {
+  s.addText("0.981", {
     x: 8.5, y: 1.68, w: 4.0, h: 0.75, isTextBox: true, margin: 0,
     fontFace: HEAD, fontSize: 44, bold: true, color: SAFFRON, align: "center",
   });
@@ -369,9 +369,9 @@ function footer(s, text) {
   });
   const pts = [
     ["There is no headroom on clean input.", CONTRA],
-    ["Contrast consistency 0.952 — not gaming surface similarity.", MUTED],
-    ["Collapses under corruption: 0.980 → 0.649 [0.602, 0.694], review load 29% → 56%.", INK],
-    ["Every difference significant under a paired bootstrap, 1000 resamples.", MUTED],
+    ["Contrast consistency 0.956 — not gaming surface similarity.", MUTED],
+    ["Collapses under real corruption: 0.981 → 0.361 [0.315, 0.404].", INK],
+    ["Review load 29% → 85%. It abstains on 79% of decidable cases — the exact gap a learned model is for.", INK],
   ];
   let py = 3.9;
   pts.forEach(([t, c]) => {
@@ -384,7 +384,7 @@ function footer(s, text) {
     });
     py += 0.72;
   });
-  footer(s, "5 languages × 120 identities, seed 20260906. Intervals: percentile bootstrap, 1000 resamples over CONTRAST GROUPS — resampling instances would treat correlated observations as independent and give intervals ~7% too narrow. Reproduce: scripts/run_noise_ablation.ps1");
+  footer(s, "Noise rates MEASURED from Tesseract on shaped renders (M1) — a lower bound on real documents. The earlier hand-built model had deletion 10-17x too low and put moderate at 0.831. 5 languages × 120 identities, seed 20260906.");
   s.addNotes("Lead with the number. 0.980 clean. That kills the original framing and points at the real one.");
 }
 
@@ -521,8 +521,8 @@ function footer(s, text) {
 
   const ms = [
     ["M0", "Schema, generator, baselines, evaluation harness", "DONE", ENTAIL],
-    ["M1", "Calibrate the OCR noise model against a real engine", "CRITICAL", CONTRA],
-    ["M2", "Real name data — Dakshina, all four languages", "NEXT", SAFFRON],
+    ["M1", "OCR noise model calibrated against Tesseract", "DONE", ENTAIL],
+    ["M2", "Dakshina — engines measured on human romanisations", "DONE", ENTAIL],
     ["M3", "Fine-tuned cross-encoder (Colab / Kaggle GPU)", "", MUTED],
     ["M4", "Selective-prediction analysis, risk–coverage", "", MUTED],
     ["M5", "Human-labelled validation subset, agreement", "", MUTED],
@@ -556,7 +556,7 @@ function footer(s, text) {
     x: 8.35, y: 2.0, w: 4.35, h: 3.5, rectRadius: 0.06,
     fill: { color: INK }, line: { color: INK },
   });
-  s.addText("M1 is the risk", {
+  s.addText("What M1 found", {
     x: 8.65, y: 2.22, w: 3.8, h: 0.35, isTextBox: true, margin: 0,
     fontFace: HEAD, fontSize: 16, bold: true, color: SAFFRON,
   });
@@ -564,7 +564,7 @@ function footer(s, text) {
     x: 8.65, y: 2.68, w: 3.8, h: 2.6, isTextBox: true, margin: 0,
     fontFace: BODY, fontSize: 11.5, color: SAND, lineSpacing: 15,
   });
-  s.addText("Fallback if M1 proves expensive: the calibration itself — a per-script OCR error characterisation for Indian identity documents — is a publishable contribution on its own.", {
+  s.addText("Remaining risk: rendered text has no paper grain, glare or perspective, so the measured rates are a stated LOWER BOUND on real documents. M1b adds a second engine and a real-document correction factor.", {
     x: 0.6, y: 5.75, w: 7.4, h: 0.6, isTextBox: true, margin: 0,
     fontFace: BODY, fontSize: 12, italic: true, color: MUTED, lineSpacing: 15,
   });

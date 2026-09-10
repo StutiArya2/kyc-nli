@@ -10,10 +10,10 @@ document-level NLI (entailment / contradiction / neutral) across the five
 scripts of the Indian document context: Latin, Devanagari, Tamil, Bengali and
 Perso-Arabic (en, hi, ta, bn, ur).
 
-**Current phase: Phase 0 complete, Phase 1 not started.** The generator, the
-transliteration engines, the OCR noise model, the rule baseline and the
-evaluation harness all work. There is no neural model. `src/kyc_nli/nli/` is
-empty on purpose.
+**Current phase: M0-M3a done.** The generator, the transliteration engines, the
+OCR noise model (now *measured*, milestone M1), the rule baseline, the evaluation
+harness with bootstrap CIs, and the cross-encoder pipeline all work. The GPU
+fine-tune (M3b) has not been run.
 
 **The finding that governs every decision here:** the deterministic rule
 baseline reaches 0.980 macro-F1 on noise-free input. Do not propose work that
@@ -37,7 +37,9 @@ python -m venv .venv
 | Compare baselines (with CIs + paired test) | `.venv/Scripts/kyc-nli compare` |
 | Full report | `.venv/Scripts/kyc-nli run-baseline rule_engine` |
 | Look at real instances | `.venv/Scripts/kyc-nli inspect --language ta -n 3` |
+| Train the cross-encoder | `.venv/Scripts/python scripts/train_cross_encoder.py` |
 | Noise ablation | `scripts/run_noise_ablation.ps1` |
+| Presentation demo | `.\demo.ps1` (see `docs/DEMO.md`) |
 
 Always run tests and lint before declaring a change done. Both are fast.
 
@@ -71,6 +73,15 @@ Always run tests and lint before declaring a change done. Both are fast.
 - **Never change the bootstrap resampling unit from the contrast group to the
   instance.** It silently narrows every interval by treating correlated
   observations as independent. A test guards this.
+- **Never let the model see `clean_value` or the transliteration variant sets.**
+  `clean_value` is the pre-corruption ground truth and exists for error analysis;
+  the variant sets are the rule baseline's central advantage. Either would make a
+  win over that baseline uninterpretable. `leaks_ground_truth` and
+  `tests/test_nli_dataset.py` guard this.
+- **Never let `kyc-nli demo` require an optional component.** It is run live in
+  front of an audience; a missing model, corpus or dataset must degrade to a
+  printed note, never an exception. `tests/test_demo.py` guards every degraded
+  path.
 - **Never fabricate a citation, a transliteration table entry, or a standard's
   contents.** Anything not verified against the primary source is marked
   `UNVERIFIED` in-code (see `translit/tables.py`) and must stay marked until

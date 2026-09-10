@@ -164,6 +164,12 @@ class Instance(BaseModel):
     hypothesis: Hypothesis
     label: Label
 
+    #: The fabricated document holder this instance was built from. ONE identity
+    #: produces SEVERAL contrast groups, so this is the coarser key and it is the
+    #: one splits must use: splitting on contrast_group_id alone put 94% of test
+    #: identities into training as well, letting a model memorise a document in
+    #: one group and recall it in another.
+    identity_id: str | None = None
     #: Minimal-pair grouping. All instances sharing a contrast_group_id differ by
     #: one controlled edit; a model must get the whole group right to score on
     #: the contrast metric. This is what separates semantic inference from

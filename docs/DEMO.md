@@ -1,0 +1,129 @@
+# How to demo this
+
+One command, about a minute, no network and no GPU. Everything on screen is
+computed at the moment it appears — nothing is pre-recorded, so if a number looks
+wrong the system is wrong.
+
+## The command
+
+```powershell
+cd "C:\Users\HP\Desktop\projects\NLP\kyc-nli"
+.\demo.ps1
+```
+
+That is the whole thing. `demo.ps1` sets the console to UTF-8 (without it,
+Windows PowerShell mangles Devanagari and Bengali) and runs the walkthrough.
+
+If you would rather type it yourself:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"; .\.venv\Scripts\kyc-nli.exe demo
+```
+
+**Before the room:** widen the terminal to at least 100 columns and increase the
+font size. The tables are drawn to fit the width they are given, and a narrow
+window wraps them into mush.
+
+## What the five sections say
+
+Run `.\demo.ps1 -Step N` to show one section on its own.
+
+### 1 — The problem
+A real document from the benchmark, side by side: the Bengali (or Hindi, or
+Tamil) zone and the English zone. **Zero characters in common.** Same card, same
+person. Character matching calls it a mismatch and rejects a real customer.
+
+> *"This is one document. The bank's system compares these two strings and
+> rejects the customer."*
+
+### 2 — Three answers, not two
+One real instance of each label, with the reason it carries that label.
+
+The NEUTRAL panel is the one to dwell on: the surname is on the card but the scan
+is unreadable. That is not fraud, it is *don't know*, and it belongs with a human.
+
+> *"Every system in production has two answers. The third one is the
+> contribution."*
+
+### 3 — How bad is it, really?
+Measured on Dakshina — romanisations written by native speakers, not by us.
+Hindi averages 1.8 spellings per word; **Urdu 4.3, with 98% of words having more
+than one.**
+
+> *"We didn't assume romanisation is ambiguous. We measured it, on someone
+> else's data."*
+
+Skipped automatically if Dakshina is not downloaded. To have it: `kyc-nli fetch-dakshina` (~2 GB, once).
+
+### 4 — Head to head
+The scoreboard, scored live on 1,050 held-out instances. Read the **"whole-group
+correct"** column, not the headline: it is the fraction of minimal-pair groups
+where *every* variant is right, and it is what separates real inference from
+noticing that two strings look similar.
+
+> *"Exact matching rejects 89% of genuine customers. The rule engine gets that
+> to 9% — but it does it by sending 63% of everything to a human."*
+
+### 5 — The finding
+The result that reframed the project. We built the strongest possible rulebook
+**against our own idea** first. On a clean scan it scores 0.981 — there is nothing
+for a model to win there. Under realistic scan damage it collapses to 0.361, and
+it fails by *giving up*: at heavy noise it abstains on 79% of cases the document
+actually decides.
+
+> *"We tried to kill our own idea in week one. It survived, but only in the place
+> we weren't originally looking."*
+
+## Two questions you will get
+
+**"Is that difference real, or noise?"**
+Run it with the statistics on:
+
+```powershell
+.\demo.ps1 -Bootstrap 1000
+```
+
+Every macro-F1 gets a 95% confidence interval and every comparison a paired
+bootstrap test. It adds about 20 seconds.
+
+**"Isn't this just synthetic data?"**
+Yes, and say so plainly — real identity documents are illegal to collect. Then
+say what is *not* synthetic: the romanisations are human-written (Dakshina), and
+the OCR error rates are measured from Tesseract across five scripts, not guessed.
+`docs/m1-ocr-calibration-findings.md` and `docs/m2-dakshina-findings.md`.
+
+## If something goes wrong
+
+| Symptom | Fix |
+| --- | --- |
+| Indic text shows as boxes or `?` | Use Windows Terminal, not the old console. `demo.ps1` already sets UTF-8. |
+| Tables wrap badly | Widen the window past 100 columns. |
+| "No benchmark on disk" | Harmless — it generates one on the spot, adds ~15s. |
+| Section 3 skipped | Dakshina not downloaded. Fine to skip; say the numbers instead. |
+| "cross_encoder is not trained yet" | Expected until training finishes. Sections 1–5 all still run. |
+
+**The demo never requires the neural model.** It shows the baselines and says the
+model is pending. That is deliberate: a demo that depends on a 9-hour training run
+finishing is a demo that fails in front of an audience.
+
+## Deeper dives, if asked
+
+```powershell
+# Read actual benchmark instances, in any language
+.\.venv\Scripts\kyc-nli.exe inspect --language ta -n 2
+
+# Why these five languages
+.\.venv\Scripts\kyc-nli.exe languages
+
+# Full per-language and per-phenomenon breakdown
+.\.venv\Scripts\kyc-nli.exe run-baseline rule_engine
+
+# The engines against real human romanisations
+.\.venv\Scripts\kyc-nli.exe translit-eval
+```
+
+## The slide deck
+
+`docs/proposal/KYC-NLI-Mid-Review.pptx` — 11 slides covering the same ground.
+Use the deck for the narrative and the terminal for the proof; running
+`.\demo.ps1` live after slide 7 is worth more than any slide.

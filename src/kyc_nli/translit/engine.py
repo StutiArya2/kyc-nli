@@ -39,13 +39,37 @@ def _reduce_geminates(text: str) -> str:
 
 
 class Transliterator(ABC):
-    """Maps a native-script string to the set of plausible Latin renderings."""
+    """Maps a native-script string to the set of plausible Latin renderings.
+
+    An engine has two sources of variants: the rules it generates from the
+    script, and an optional attested-romanisation lexicon. Real KYC systems use
+    both, so the baseline should too -- withholding the lexicon would make the
+    baseline artificially weak and any win over it meaningless.
+
+    THE LEXICON MUST COME FROM A TRAINING SPLIT. Attaching a lexicon built from
+    the same data the engine is then scored on measures memorisation, not
+    transliteration. `kyc-nli translit-eval` enforces the separation.
+    """
 
     script: Script
+    #: Attested native -> Latin spellings. Empty unless attach_lexicon is called.
+    _lexicon: dict[str, set[str]]
+
+    def attach_lexicon(self, lexicon: dict[str, set[str]]) -> None:
+        """Supply attested romanisations, keyed by native-script string."""
+        self._lexicon = lexicon
+
+    def variants(self, text: str) -> set[str]:
+        """All Latin renderings this engine accepts. Uppercase.
+
+        Rule-generated variants unioned with any attested spellings.
+        """
+        attested = getattr(self, "_lexicon", {}).get(text, set())
+        return self._generate(text) | attested
 
     @abstractmethod
-    def variants(self, text: str) -> set[str]:
-        """All Latin renderings this engine considers acceptable. Uppercase."""
+    def _generate(self, text: str) -> set[str]:
+        """Rule-generated renderings, before the lexicon is consulted."""
 
     def canonical(self, text: str) -> str:
         """The single normative rendering, where one exists.
@@ -63,7 +87,7 @@ class IdentityTransliterator(Transliterator):
 
     script = Script.LATIN
 
-    def variants(self, text: str) -> set[str]:
+    def _generate(self, text: str) -> set[str]:
         return {text.upper()}
 
 
@@ -112,11 +136,12 @@ class BrahmicTransliterator(Transliterator):
     max_variants: int = 8192
 
     def __init__(self) -> None:
+        self._lexicon = {}
         # Memoised per engine. The rule baseline calls variants() once per
         # observation per instance, and the expansion is the hot path.
         self._cache: dict[str, set[str]] = {}
 
-    def variants(self, text: str) -> set[str]:
+    def _generate(self, text: str) -> set[str]:
         cached = self._cache.get(text)
         if cached is not None:
             return cached
@@ -403,27 +428,35 @@ class ArabicTransliterator(Transliterator):
         ("MSTFY", "MUSTAFA"),
     )
 
-    def variants(self, text: str) -> set[str]:
+    def _generate(self, text: str) -> set[str]:
         skeleton = self._skeleton(text)
-        out = {skeleton}
+        return {v for v in ({skeleton} | self._attested_forms(skeleton)) if v}
+
+    def canonical(self, text: str) -> str:
+        """The attested romanisation, falling back to the consonant skeleton.
+
+        Deliberately consults ONLY the romanisation lexicon, never the general
+        variant set. ``variants`` includes speculative vowel readings whose job
+        is *recognition* — accepting what a holder might have written. Picking
+        one of those as the document's own Latin rendering would print a guess
+        on the passport: صدیقی became SDAIQAI once vowel readings were added,
+        where the attested spelling is SIDDIQUI.
+
+        Recognition and generation are different jobs. This is the generation
+        side, and it gets the conservative answer.
+        """
+        skeleton = self._skeleton(text)
+        attested = sorted(self._attested_forms(skeleton))
+        return attested[0] if attested else skeleton
+
+    def _attested_forms(self, skeleton: str) -> set[str]:
+        """Lexicon expansions of ``skeleton``, and nothing speculative."""
+        out: set[str] = set()
         for token in skeleton.split():
             for key, expansion in self._ALTERNATIONS:
                 if token == key:
                     out.add(skeleton.replace(token, expansion))
-        return {v for v in out if v}
-
-    def canonical(self, text: str) -> str:
-        """Prefer an attested romanisation over the raw consonant skeleton.
-
-        The base implementation returns ``sorted(variants)[0]``, which for
-        Perso-Arabic picks an arbitrary member and frequently lands on the
-        vowel-less skeleton (SDYQY rather than SIDDIQUI). A real Indian passport
-        prints the attested spelling in its Latin zone, so that is what the
-        generator must use as the document's own Latin rendering.
-        """
-        skeleton = self._skeleton(text)
-        attested = sorted(v for v in self.variants(text) if v != skeleton)
-        return attested[0] if attested else skeleton
+        return out
 
     def _skeleton(self, text: str) -> str:
         return "".join(
@@ -451,6 +484,37 @@ class UrduTransliterator(ArabicTransliterator):
 
     script = Script.ARABIC  # same script; a distinct engine for the language
     table = tables.ICAO_URDU
+
+    #: Matres lectionis. In Perso-Arabic, ی and و each serve as BOTH a consonant
+    #: and a long vowel, and the script does not distinguish the two uses. So a
+    #: consonant-only reading of آئین gives AAYYN where every human wrote
+    #: AAYEEN, AAIEEN or AAOIN -- the letters are there, we were just refusing
+    #: to read them as vowels.
+    #:
+    #: This is the single biggest source of Urdu recall, and it is a fact about
+    #: the writing system rather than a tuning hack: without it the engine
+    #: recognised under 10% of attested human romanisations.
+    _VOWEL_READINGS: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("Y", ("I", "EE", "E", "AI")),
+        ("W", ("U", "OO", "O", "AU")),
+    )
+    #: Bounded like the Brahmic engines, for the same reason.
+    max_variants: int = 512
+
+    def _generate(self, text: str) -> set[str]:
+        out = set(super()._generate(text))
+        for letter, readings in self._VOWEL_READINGS:
+            for form in list(out):
+                for reading in readings:
+                    out.add(form.replace(letter, reading))
+                    start = 0
+                    while (idx := form.find(letter, start)) != -1:
+                        out.add(form[:idx] + reading + form[idx + 1 :])
+                        start = idx + 1
+        out = {v for v in out if v}
+        if len(out) > self.max_variants:
+            out = set(sorted(out)[: self.max_variants])
+        return out
 
     #: Romanisation lexicon, keyed by the skeleton THIS ENGINE ACTUALLY EMITS.
     #: Derived by running the engine over the name pool rather than written from
@@ -526,7 +590,7 @@ class CyrillicTransliterator(Transliterator):
 
     script = Script.CYRILLIC
 
-    def variants(self, text: str) -> set[str]:
+    def _generate(self, text: str) -> set[str]:
         icao = self._map(text, tables.ICAO_CYRILLIC)
         common = {
             icao,
@@ -559,6 +623,7 @@ class HanTransliterator(Transliterator):
     script = Script.HAN
 
     def __init__(self) -> None:
+        self._lexicon = {}
         self._pypinyin = None
         try:  # optional dependency: pip install -e ".[translit]"
             import pypinyin  # type: ignore[import-not-found]
@@ -575,7 +640,7 @@ class HanTransliterator(Transliterator):
             return [s[0].upper() for s in self._pypinyin.pinyin(joined, style=style)]
         return [tables.PINYIN_MINIMAL.get(c, c) for c in cleaned]
 
-    def variants(self, text: str) -> set[str]:
+    def _generate(self, text: str) -> set[str]:
         syls = [s for s in self.syllables(text) if s]
         if not syls:
             return set()

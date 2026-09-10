@@ -68,24 +68,38 @@ def write_manifest(
     return manifest_path
 
 
+def _split_key(instance: Instance) -> str:
+    """The unit a split may not break apart: the identity, then the group, then
+    the instance -- whichever coarsest key the instance actually carries."""
+    return instance.identity_id or instance.contrast_group_id or instance.id
+
+
 def split_by_identity(
     instances: list[Instance], dev_fraction: float = 0.15, test_fraction: float = 0.15
 ) -> dict[str, list[Instance]]:
-    """Split by contrast group, stratified by language.
+    """Split by IDENTITY, stratified by language.
 
-    Two constraints, both of which have bitten this project already:
+    Three constraints, every one of which has bitten this project already:
 
-    1. NO GROUP MAY STRADDLE A SPLIT. Members of a contrast group share a
-       premise, so a group split across train/test lets a model memorise the
-       document rather than reason about it.
-    2. EVERY SPLIT MUST CONTAIN EVERY LANGUAGE. Group ids are prefixed with the
-       language code, so an unstratified sort put 100% of the test set in one
-       language and made the per-language breakdown meaningless. Stratify.
+    1. NO IDENTITY MAY STRADDLE A SPLIT. This is the coarsest and most important
+       one, and it was got wrong first. One fabricated identity produces three
+       contrast groups (-name, -time, -evidence) that share a surname, dates and
+       document number. Splitting on contrast_group_id put 359 of 383 test
+       identities into training as well: a model could memorise a document from
+       one group and recall it in another. The cross-encoder scored 0.989
+       macro-F1 under that split, which measured memorisation as much as
+       inference.
+    2. NO CONTRAST GROUP MAY STRADDLE A SPLIT. Implied by (1), since a group
+       belongs to exactly one identity, but asserted separately in the tests
+       because it is the property the contrast metric depends on.
+    3. EVERY SPLIT MUST CONTAIN EVERY LANGUAGE. Identity ids are prefixed with
+       the language code, so an unstratified sort put 100% of the test set in one
+       language and made the per-language breakdown meaningless.
     """
     groups_by_language: dict[str, list[str]] = defaultdict(list)
     seen: set[str] = set()
     for inst in instances:
-        key = inst.contrast_group_id or inst.id
+        key = _split_key(inst)
         if key not in seen:
             seen.add(key)
             groups_by_language[inst.language].append(key)
@@ -104,7 +118,7 @@ def split_by_identity(
 
     out: dict[str, list[Instance]] = {"train": [], "dev": [], "test": []}
     for inst in instances:
-        key = inst.contrast_group_id or inst.id
+        key = _split_key(inst)
         if key in test_groups:
             out["test"].append(inst)
         elif key in dev_groups:

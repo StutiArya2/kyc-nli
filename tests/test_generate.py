@@ -80,6 +80,52 @@ def test_neutral_instances_are_structurally_neutral(instances) -> None:
         )
 
 
+def test_splits_do_not_share_identities(instances) -> None:
+    """The test that should have existed from the start.
+
+    One fabricated identity produces THREE contrast groups (-name, -time,
+    -evidence) that share a surname, dates and document number. Splitting on
+    contrast_group_id alone put 359 of 383 test identities into training too, so
+    a model could memorise a document in one group and recall it in another. The
+    cross-encoder scored 0.989 macro-F1 under that split; the number measured
+    memorisation as much as inference.
+
+    Identity is the coarsest unit and therefore the one the split must respect.
+    """
+    splits = split_by_identity(instances)
+    ids = {
+        name: {i.identity_id for i in subset if i.identity_id}
+        for name, subset in splits.items()
+    }
+    assert ids["train"], "no identity_id on any instance -- the field is not being set"
+    assert not ids["train"] & ids["test"], (
+        f"{len(ids['train'] & ids['test'])} identities appear in both train and test"
+    )
+    assert not ids["train"] & ids["dev"]
+    assert not ids["dev"] & ids["test"]
+
+
+def test_every_instance_carries_an_identity_id(instances) -> None:
+    """Without it the splitter silently falls back to the group and leaks again."""
+    missing = [i.id for i in instances if not i.identity_id]
+    assert not missing, f"{len(missing)} instances have no identity_id, e.g. {missing[:3]}"
+
+
+def test_one_identity_spans_several_contrast_groups(instances) -> None:
+    """The precondition that makes the identity-level split necessary.
+
+    If this ever stops being true, the identity and group splits coincide and
+    the distinction stops mattering -- but silently, which is why it is asserted.
+    """
+    from collections import defaultdict
+
+    groups_per_identity = defaultdict(set)
+    for inst in instances:
+        if inst.identity_id and inst.contrast_group_id:
+            groups_per_identity[inst.identity_id].add(inst.contrast_group_id)
+    assert max(len(v) for v in groups_per_identity.values()) > 1
+
+
 def test_splits_do_not_share_contrast_groups(instances) -> None:
     """A group straddling train/test would leak the premise."""
     splits = split_by_identity(instances)

@@ -13,7 +13,7 @@ format variation and OCR corruption are handled by inference instead of by
 exact matching.
 
 > **Read this before using any number from this repo.** The Phase-0 pilot found
-> that a *deterministic rule engine* reaches 0.980 macro-F1 on noise-free input.
+> that a *deterministic rule engine* reaches 0.981 macro-F1 on noise-free input.
 > The defensible contribution is therefore in the OCR-noise regime, not in clean
 > cross-script matching. See [Phase-0 finding](#the-phase-0-finding) and
 > [`docs/plan.md`](docs/plan.md).
@@ -97,21 +97,25 @@ fuzzy thresholds. Then the benchmark was generated at four OCR-noise levels.
 
 | OCR noise | `exact_match` macro-F1 (95% CI) | **`rule_engine` macro-F1 (95% CI)** | contrast consistency | false-mismatch |
 | --- | --- | --- | --- | --- |
-| clean | 0.371 [0.345, 0.395] | **0.980** [0.969, 0.989] | 0.952 | 0.000 |
-| light | 0.359 [0.331, 0.384] | **0.903** [0.877, 0.925] | 0.793 | 0.098 |
-| moderate | 0.353 [0.327, 0.377] | **0.831** [0.798, 0.860] | 0.652 | 0.133 |
-| heavy | 0.285 [0.257, 0.312] | **0.649** [0.602, 0.694] | 0.396 | 0.156 |
+| clean | 0.368 [0.341, 0.392] | **0.981** [0.971, 0.991] | 0.956 | 0.000 |
+| light | 0.354 [0.326, 0.380] | **0.920** [0.900, 0.938] | 0.815 | 0.075 |
+| moderate | 0.252 [0.231, 0.275] | **0.597** [0.552, 0.644] | 0.333 | 0.087 |
+| heavy | 0.219 [0.206, 0.235] | **0.361** [0.315, 0.404] | 0.074 | 0.029 |
 
-*(5 languages, 120 identities each, seed 20260906. Intervals are percentile
+*(5 languages, 120 identities each, seed 20260906. **Noise rates are measured**
+from Tesseract on shaped renders — milestone M1, see
+[docs/m1-ocr-calibration-findings.md](docs/m1-ocr-calibration-findings.md) —
+and are a lower bound on real-document error. Intervals are percentile
 bootstrap, 1000 resamples over **contrast groups** — not instances: members of a
 group share a premise, so resampling instances treats correlated observations as
 independent and yields intervals ~7% too narrow. Every pairwise difference is
 significant under a paired bootstrap. Reproduce with
 `scripts/run_noise_ablation.ps1`.)*
 
-**A rule engine gets 0.980 on clean input.** There is no room for a neural
+**A rule engine gets 0.981 on clean input.** There is no room for a neural
 contribution there. It degrades steeply under corruption — human review load
-rises from 29% to 56% between clean and heavy — so that is where the
+rises from 29% to **85%** between clean and heavy, with the engine abstaining on
+79% of cases the document actually decides — so that is where the
 contribution has to live. The revised claim is about **selective prediction
 under input corruption**, and it is falsifiable by the risk–coverage curve.
 
@@ -140,10 +144,20 @@ rationale.
 | `ur` | Perso-Arabic | ICAO 9303 Arabic, extended | partial | Short vowels unwritten: the script gives a skeleton (SDYQY), a lexicon supplies the rest (SIDDIQUI) |
 
 Four of five are non-normative or partial — the set is concentrated on the regime
-where the project's claim could be true. Measured romanisation recall of the rule
-engine against the attested spellings: en 100%, hi 90%, ta 92%, bn 100%, ur 98%.
-The residual needs schwa *epenthesis*, monophthongisation or Grantha conjunct
-handling, and is reported rather than tuned away.
+where the project's claim could be true.
+
+**How one-to-many is romanisation, really?** Measured on Dakshina (~30k words per
+language, romanisations written by native speakers):
+
+| | Hindi | Tamil | Bengali | Urdu |
+| --- | --- | --- | --- | --- |
+| spellings per word | 1.79 | 2.71 | 3.67 | **4.20** |
+| words with >1 spelling | 57.0% | 74.6% | 90.2% | **97.6%** |
+| our engine finds the most-attested spelling | 0.727 | 0.672 | 0.626 | **0.150** |
+
+A system assuming one correct Latin form is wrong on almost every Urdu word
+before it starts. Full analysis, including two real bugs this surfaced, in
+[docs/m2-dakshina-findings.md](docs/m2-dakshina-findings.md).
 
 Nothing hardcodes a language. Adding a sixth is a block in
 `configs/languages.yaml` plus a name pool. Russian and Chinese are retained in
@@ -167,24 +181,40 @@ python -m venv .venv
 On macOS/Linux use `.venv/bin/python` instead. Python 3.10+ (developed on 3.13).
 
 Optional extras: `.[nli]` for the Phase-1 GPU work (install on Colab, not
-locally), `.[ocr]` for a real OCR engine, `.[translit]` for pypinyin and
-indic-transliteration.
+locally), `.[ocr]` for the OCR calibration harness (Pillow + HarfBuzz +
+FreeType), `.[translit]` for pypinyin and indic-transliteration.
+
+The OCR calibration also needs **Tesseract** with the `eng`, `hin`, `tam`, `ben`
+and `urd` language packs, installed as a system package.
 
 ## Quickstart
 
-Smallest command producing a real result — about 20 seconds end to end:
+**To see what this is, in one minute:**
 
-```bash
-.venv/Scripts/kyc-nli generate --identities 50 && .venv/Scripts/kyc-nli compare
+```powershell
+.\demo.ps1
 ```
 
-Then look at actual instances before trusting any number:
+A live walkthrough: the cross-script problem on a real document, the three
+labels with worked examples, how one-to-many romanisation actually is, the
+baselines scored on the spot, and the finding that reframed the project. No
+network, no GPU, and it degrades gracefully if the model or corpus is missing.
+Presenter notes and fallbacks: [docs/DEMO.md](docs/DEMO.md).
+
+**To reproduce the headline numbers:**
+
+```bash
+.venv/Scripts/kyc-nli generate && .venv/Scripts/kyc-nli compare
+```
+
+**To read actual benchmark instances** before trusting any number:
 
 ```bash
 .venv/Scripts/kyc-nli inspect --language ta --phenomenon cross_script_name_icao -n 2
 ```
 
-Other commands: `kyc-nli languages`, `kyc-nli run-baseline rule_engine`.
+Other commands: `kyc-nli languages`, `run-baseline`, `translit-eval`,
+`calibrate-ocr`, `fetch-dakshina`.
 
 ## Data
 
@@ -209,8 +239,14 @@ the repo run on a clean checkout with zero downloads.
 | Output | Command |
 | --- | --- |
 | Baseline comparison table | `kyc-nli generate && kyc-nli compare` |
+| Live demo | `.\demo.ps1` |
 | Full report for one system | `kyc-nli run-baseline rule_engine` |
 | Noise ablation (README table) | `scripts/run_noise_ablation.ps1` |
+| Fetch Dakshina (~2 GB, once) | `.venv/Scripts/kyc-nli fetch-dakshina` |
+| Calibrate the OCR noise model | `.venv/Scripts/kyc-nli calibrate-ocr --fetch` (needs Tesseract) |
+| Train the cross-encoder (CPU, ~2h) | `.venv/Scripts/python scripts/train_cross_encoder.py` |
+| Train it properly (GPU, ~10 min) | [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb) |
+| Score engines vs. human romanisations | `.venv/Scripts/kyc-nli translit-eval` |
 | Test suite | `.venv/Scripts/python -m pytest` |
 | Rebuild the mid-review deck | `node scripts/build_midreview_deck.js` (needs `npm install pptxgenjs`) |
 | Regenerate the corrected Review 1 deck | `python scripts/fix_review1_citations.py "docs/proposal/NLP review 1.pptx" "docs/proposal/NLP review 1 (corrected).pptx"` |
@@ -231,6 +267,7 @@ docs/
   decisions/      numbered architecture decision records
   proposal/       Review 1 deck, its corrected version, and the mid-review deck
   literature/     citation-audit.md -- all 12 references checked against source
+  DEMO.md         presenter notes for the live walkthrough
 notebooks/        exploratory only, numbered, outputs stripped
 src/kyc_nli/
   schema.py       the data model — start here
@@ -239,7 +276,7 @@ src/kyc_nli/
   ocr/            script-aware corruption model
   translit/       ICAO + non-normative transliteration engines
   consistency/    cross-field rules (currently inside baselines/rules.py)
-  nli/            neural models — NOT YET IMPLEMENTED
+  nli/            cross-encoder: serialisation, model wrapper, training loop
   baselines/      exact match (weak) and rule engine (the one that matters)
   evaluation/     metrics, risk-coverage
   cli.py          every experiment entry point
@@ -253,9 +290,12 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [x] **M0** Schema, generator, MRZ encoder, transliteration engines, OCR noise model, rule baseline, evaluation harness
 - [x] Phase-0 pilot and go/no-go signal
 - [x] Bootstrap confidence intervals and paired significance testing
-- [ ] **M1** Calibrate the noise model against a real OCR engine on MIDV-2020 — *critical path*
-- [ ] **M2** Replace embedded name pools with Dakshina (covers all four non-English languages)
-- [ ] **M3** Fine-tuned mDeBERTa-v3-base cross-encoder (Colab/Kaggle GPU)
+- [x] **M1** Noise model calibrated against Tesseract ([findings](docs/m1-ocr-calibration-findings.md)). The hand-built model had deletion 10–17× too low; measured rates are now in `kyc_nli.ocr.measured`
+- [ ] **M1b** Re-run Urdu in Nastaliq, and a second OCR engine, to separate font/engine limits from script difficulty
+- [x] **M2** Dakshina integrated — engines measured against human romanisations ([findings](docs/m2-dakshina-findings.md))
+- [ ] **M2b** A *name*-shaped corpus (Wikidata person labels); Dakshina is general vocabulary
+- [x] **M3a** Cross-encoder pipeline, leakage guards, and a fixed split bug ([findings](docs/m3-model-findings.md)) — clean-split training in progress
+- [ ] **M3b** The GPU run — XLM-R via [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb)
 - [ ] **M4** Selective-prediction analysis: risk–coverage, review-load reduction
 - [ ] **M5** Human-labelled 500-instance validation subset, inter-annotator agreement
 - [ ] **M6** Ablations and error analysis

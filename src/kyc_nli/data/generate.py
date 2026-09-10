@@ -331,6 +331,7 @@ class InstanceGenerator:
             label=Label.ENTAILMENT,
             phenomenon=phenomenon,
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 f"The document prints {identity.surname_native!r} in "
                 f"{spec.script.value}; {claimed!r} is an accepted Latin rendering "
@@ -351,6 +352,7 @@ class InstanceGenerator:
             label=Label.CONTRADICTION,
             phenomenon="cross_script_name_mismatch",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 f"{other.surname_latin!r} is not a rendering of "
                 f"{identity.surname_native!r} under any accepted romanisation."
@@ -369,6 +371,7 @@ class InstanceGenerator:
             label=Label.NEUTRAL,
             phenomenon="field_absent_from_document",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 f"This document does not carry {absent_field.value}. The claim is "
                 f"neither supported nor refuted by any evidence present; it must "
@@ -398,6 +401,7 @@ class InstanceGenerator:
             label=Label.ENTAILMENT,
             phenomenon="temporal_consistent",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 f"Issued {identity.date_of_issue.isoformat()} under the "
                 f"{identity.template_era} template, expiring "
@@ -420,6 +424,7 @@ class InstanceGenerator:
             label=Label.CONTRADICTION,
             phenomenon="impossible_date_triple",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 f"Issue {broken.date_of_issue.isoformat()} and expiry "
                 f"{broken.date_of_expiry.isoformat()} imply a 40-year validity. "
@@ -464,6 +469,7 @@ class InstanceGenerator:
             label=Label.NEUTRAL,
             phenomenon="field_illegible",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 "The surname is present on the document but unreadable, and no "
                 "other zone carries it. The claim cannot be adjudicated from this "
@@ -482,6 +488,7 @@ class InstanceGenerator:
             label=Label.CONTRADICTION,
             phenomenon="date_off_by_one",
             contrast_group_id=group,
+            identity_id=stem,
             rationale=(
                 "Both the VIZ and the MRZ legibly carry a different date of birth. "
                 "The evidence is present and refutes the claim."
@@ -503,6 +510,7 @@ class InstanceGenerator:
         phenomenon: str,
         contrast_group_id: str,
         rationale: str,
+        identity_id: str,
     ) -> Instance:
         hypothesis = Hypothesis(
             field=field,
@@ -517,6 +525,7 @@ class InstanceGenerator:
             premise=premise,
             hypothesis=hypothesis,
             label=label,
+            identity_id=identity_id,
             contrast_group_id=contrast_group_id,
             phenomenon=phenomenon,
             rationale=rationale,
