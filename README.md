@@ -122,13 +122,25 @@ contribution there. It degrades steeply under corruption — human review load
 rises from 29% to **85%** between clean and heavy, with the engine abstaining on
 79% of cases the document actually decides — so that is where the
 contribution has to live. The revised claim is about **selective prediction
-under input corruption**, and it is falsifiable by the risk–coverage curve.
+under input corruption**, and it was falsifiable by the risk–coverage curve.
 
-Caveat: the noise model is hand-built from documented per-script OCR failure
-modes, not calibrated against a real engine. The direction of this finding is
-robust; the magnitude is not yet trustworthy. Calibration is milestone M1 and
-the project's single point of failure —
-[decision 0004](docs/decisions/0004-ocr-noise-is-simulated.md).
+**It was put to that test and survived** — [M4 findings](docs/m4-selective-prediction.md).
+Holding the automation error rate fixed rather than comparing systems at their own
+operating points, the rule engine **cannot reach a 5% error budget at any
+threshold**: the best it manages is 5.2% while sending 93% of traffic to a human.
+The cross-encoder meets that budget at its own operating point, 28.6% review at
+4.0% error, and still automates 51% of traffic at a 1% budget. The rule engine's
+risk–coverage curve is not even monotone — its confidences encode *which rule
+fired*, not how likely that rule is to be right, so there is nothing usable to
+threshold on.
+
+Caveat, now discharged: the noise model used to be hand-built from documented
+per-script OCR failure modes rather than calibrated against a real engine
+([decision 0004](docs/decisions/0004-ocr-noise-is-simulated.md)). Milestone M1
+measured it, and the hand-built version was wrong in *shape* — deletion ran
+10–17× too low. The numbers above are the post-calibration ones. What remains
+uncalibrated is the gap between rendered text and a real photographed document:
+these rates are a lower bound on real-document error.
 
 ## Languages
 
@@ -205,6 +217,7 @@ labels with worked examples, how one-to-many romanisation actually is, the
 baselines scored on the spot, and the finding that reframed the project. No
 network, no GPU, and it degrades gracefully if the model or corpus is missing.
 Presenter notes and fallbacks: [docs/DEMO.md](docs/DEMO.md).
+Full technical walkthrough: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
 
 **To reproduce the headline numbers:**
 
@@ -246,13 +259,16 @@ the repo run on a clean checkout with zero downloads.
 | Baseline comparison table | `kyc-nli generate && kyc-nli compare` |
 | Live demo | `.\demo.ps1` |
 | Full report for one system | `kyc-nli run-baseline rule_engine` |
+| Selective prediction (M4) | `.venv/Scripts/kyc-nli risk-coverage` |
 | Noise ablation (README table) | `scripts/run_noise_ablation.ps1` |
 | Fetch Dakshina (~2 GB, once) | `.venv/Scripts/kyc-nli fetch-dakshina` |
 | Calibrate the OCR noise model | `.venv/Scripts/kyc-nli calibrate-ocr --fetch` (needs Tesseract) |
 | Train the cross-encoder (CPU, ~2h) | `.venv/Scripts/python scripts/train_cross_encoder.py` |
 | Train it properly (GPU, ~10 min) | [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb) |
 | Score engines vs. human romanisations | `.venv/Scripts/kyc-nli translit-eval` |
-| Test suite | `.venv/Scripts/python -m pytest` |
+| Test suite (389 tests) | `.venv/Scripts/python -m pytest` |
+| Test suite with coverage | `.venv/Scripts/python -m pytest --cov=kyc_nli --cov-report=term-missing` |
+| The slow fine-tuning smoke test | `.venv/Scripts/python -m pytest -m slow` |
 | Rebuild the mid-review deck | `node scripts/build_midreview_deck.js` (needs `npm install pptxgenjs`) |
 | Regenerate the corrected Review 1 deck | `python scripts/fix_review1_citations.py "docs/proposal/NLP review 1.pptx" "docs/proposal/NLP review 1 (corrected).pptx"` |
 | Lint | `.venv/Scripts/ruff check src tests` |
@@ -272,7 +288,10 @@ docs/
   decisions/      numbered architecture decision records
   proposal/       Review 1 deck, its corrected version, and the mid-review deck
   literature/     citation-audit.md -- all 12 references checked against source
+  HOW-IT-WORKS.md full technical walkthrough, end to end
   DEMO.md         presenter notes for the live walkthrough
+  testing.md      what is verified, and the 9 defects the edge-case pass found
+  m1-*, m2-*, m3-*, m4-*  per-milestone findings
 notebooks/        exploratory only, numbered, outputs stripped
 src/kyc_nli/
   schema.py       the data model — start here
@@ -283,9 +302,9 @@ src/kyc_nli/
   consistency/    cross-field rules (currently inside baselines/rules.py)
   nli/            cross-encoder: serialisation, model wrapper, training loop
   baselines/      exact match (weak) and rule engine (the one that matters)
-  evaluation/     metrics, risk-coverage
+  evaluation/     metrics, bootstrap CIs, risk-coverage and selective curves
   cli.py          every experiment entry point
-tests/            dataset-integrity and correctness tests
+tests/            dataset-integrity, correctness and edge-case tests; see docs/testing.md
 scripts/          one script per reproducible experiment
 results/          metrics + figures, gitignored except MANIFEST.md
 ```
@@ -301,7 +320,7 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [ ] **M2b** A *name*-shaped corpus (Wikidata person labels); Dakshina is general vocabulary
 - [x] **M3a** Cross-encoder trained and scored: **0.972 macro-F1** vs the rule engine's 0.601, review load 63% → 29% ([findings](docs/m3-model-findings.md))
 - [ ] **M3b** The GPU run — XLM-R via [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb)
-- [ ] **M4** Selective-prediction analysis: risk–coverage, review-load reduction
+- [x] **M4** Selective prediction ([findings](docs/m4-selective-prediction.md)). At a 5% automation-error budget the rule engine **cannot operate at all**; the cross-encoder runs at 28.6% review load. Only the learned model's confidence ranks correctness well enough to threshold on
 - [ ] **M5** Human-labelled 500-instance validation subset, inter-annotator agreement
 - [ ] **M6** Ablations and error analysis
 - [ ] **M7** Write-up

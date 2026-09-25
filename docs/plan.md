@@ -114,6 +114,13 @@ The go/no-go signal on the revised central claim is available at the end of
 Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) at moderate noise
 *and* improve the risk–coverage curve, the claim is false.
 
+**Both conditions were tested and both held.** M3a: 0.972 [0.962, 0.982] against
+the rule engine's 0.601 [0.565, 0.640], paired difference +0.371 [0.329, 0.409].
+M4: the model's risk–coverage curve is monotone and flat at zero error to 65%
+coverage, while the rule engine's is not monotone at all — and at a 5%
+automation-error budget the rule engine cannot be operated at any threshold. The
+claim stands on the evidence that was specified in advance to falsify it.
+
 ---
 
 ## Milestones
@@ -127,7 +134,7 @@ Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) 
 | M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |
 | M3a | ✅ Cross-encoder trained and scored: **0.972 macro-F1** vs 0.601, review load 63%→29%, false rejection 9.3%→5.7%. Also found and fixed a split bug that had put 94% of test identities into training. | `docs/m3-model-findings.md` | M2 |
 | M3b | The GPU run: XLM-R, embeddings unfrozen, `notebooks/m3_colab.ipynb` | checkpoint + results table | M3a |
-| M4 | Selective-prediction analysis | risk–coverage curves, review-load-at-fixed-error table | M3 |
+| M4 | ✅ Selective-prediction analysis. The comparison that survives scrutiny: hold the automation error fixed and the rule engine **cannot reach 5% at any threshold**, while the cross-encoder meets it at its own operating point. Its confidence is also the only one that ranks correctness — the rule engine's risk–coverage curve is not even monotone. | `docs/m4-selective-prediction.md`, `kyc-nli risk-coverage` | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |
 | M6 | Ablations + error analysis | per-phenomenon, per-language, per-noise-level tables | M3 |
 | M7 | Write-up | paper draft | M4, M5, M6 |

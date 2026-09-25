@@ -1,6 +1,13 @@
 """Scoring and reporting."""
 
-from kyc_nli.evaluation.metrics import EvaluationReport, evaluate, risk_coverage
+from kyc_nli.evaluation.metrics import (
+    EvaluationReport,
+    OperatingPoint,
+    evaluate,
+    review_load_at_error,
+    risk_coverage,
+    selective_curve,
+)
 from kyc_nli.evaluation.significance import (
     DEFAULT_RESAMPLES,
     Comparison,
@@ -14,8 +21,11 @@ __all__ = [
     "Comparison",
     "EvaluationReport",
     "Interval",
+    "OperatingPoint",
     "bootstrap_macro_f1",
     "evaluate",
     "paired_bootstrap",
+    "review_load_at_error",
     "risk_coverage",
+    "selective_curve",
 ]

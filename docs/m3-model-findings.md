@@ -222,9 +222,12 @@ Still open:
 - **The GPU run (M3b).** XLM-R rather than a distilled model, embeddings
   unfrozen, ~10 minutes on a free Colab T4. `notebooks/m3_colab.ipynb`. A
   distilled CPU model is a floor, not a ceiling.
-- **The risk–coverage curve**, which is the proper shape of the selective-
-  prediction claim. We have review load at the model's own operating point
-  (28.6%); we do not yet have the curve across operating points.
+- ~~The risk–coverage curve~~ — **done in [M4](m4-selective-prediction.md).**
+  Holding the automation error fixed rather than comparing operating points
+  sharpens the result considerably: the rule engine cannot reach a 5% error
+  budget at *any* threshold, and its risk–coverage curve is not monotone,
+  because its confidences encode which rule fired rather than how likely that
+  rule is to be right. Bootstrapping the curve itself is still outstanding.
 - **Everything here is still synthetic.** Real romanisations (M2) and real OCR
   rates (M1) feed the generator, but no real identity document does, and no human
   has annotated a single label. M5 remains the honest limit on all of this.

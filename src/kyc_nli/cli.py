@@ -19,7 +19,14 @@ from kyc_nli.baselines import available_systems
 from kyc_nli.data import corpora
 from kyc_nli.data.generate import GeneratorConfig, InstanceGenerator
 from kyc_nli.data.io import load_instances, save_instances, split_by_identity, write_manifest
-from kyc_nli.evaluation import DEFAULT_RESAMPLES, evaluate, paired_bootstrap
+from kyc_nli.evaluation import (
+    DEFAULT_RESAMPLES,
+    evaluate,
+    paired_bootstrap,
+    review_load_at_error,
+    risk_coverage,
+    selective_curve,
+)
 from kyc_nli.evaluation.transliteration import HEADER, evaluate_transliteration
 from kyc_nli.languages import load_languages, repo_root
 from kyc_nli.ocr import calibrate as ocr_calibrate
@@ -111,7 +118,10 @@ def inspect(
         instances = [i for i in instances if i.phenomenon == phenomenon]
 
     for inst in instances[:n]:
-        console.rule(f"{inst.id}  [{inst.language}]  {inst.phenomenon}")
+        # The brackets are escaped: rich reads "[ta]" as a markup tag and the
+        # language code -- the one thing you filter on -- disappears from the
+        # output entirely.
+        console.rule(rf"{inst.id}  \[{inst.language}]  {inst.phenomenon}")
         table = Table(show_header=True)
         table.add_column("zone")
         table.add_column("field")
@@ -221,6 +231,63 @@ def compare(
                 )
                 colour = "green" if cmp.significant else "yellow"
                 console.print(f"  [{colour}]{cmp}[/{colour}]")
+
+
+@app.command("risk-coverage")
+def risk_coverage_cmd(
+    dataset: Path = typer.Option(Path("data/processed/synth_v0.test.jsonl")),
+    out: Path = typer.Option(Path("results/selective-prediction.json")),
+    budgets: str = typer.Option(
+        "0.10,0.05,0.02,0.01", help="Comma-separated automation error budgets."
+    ),
+    steps: int = typer.Option(20, help="Points on the curve."),
+) -> None:
+    """Milestone M4: the selective-prediction view of every available system.
+
+    The headline table reports each system at its own operating point, which is
+    not a like-for-like comparison: a system that abstains more buys a lower
+    error rate with human labour. This command fixes the error rate instead and
+    asks what each system costs to run there, which is the question a compliance
+    function actually poses.
+
+    A system that cannot reach a budget at any threshold is reported as such,
+    rather than as "100% review" -- declining to answer is not meeting a target.
+    """
+    instances = load_instances(_resolve(dataset))
+    targets = [float(b) for b in budgets.split(",") if b.strip()]
+
+    table = Table(title=f"Review load at a fixed automation error ({dataset.name})")
+    table.add_column("system")
+    table.add_column("own point", justify="right")
+    for b in targets:
+        table.add_column(f"err <= {b:.0%}", justify="right")
+
+    payload: dict[str, dict] = {}
+    for name, cls in available_systems().items():
+        preds = _predict_all(cls(), instances)
+        curve = selective_curve(instances, preds, steps=steps)
+        own = curve[0]
+        row = [name, f"{own.review_load:.1%} @ {own.error_on_auto:.1%}"]
+        budget_rows = {}
+        for b in targets:
+            point = review_load_at_error(instances, preds, max_error=b)
+            row.append("unreachable" if point is None else f"{point.review_load:.1%}")
+            budget_rows[f"{b}"] = point.as_row() if point else None
+        table.add_row(*row)
+        payload[name] = {
+            "own_operating_point": own.as_row(),
+            "review_load_at_error": budget_rows,
+            "selective_curve": [p.as_row() for p in curve],
+            "risk_coverage": [
+                {"coverage": c, "risk": r} for c, r in risk_coverage(instances, preds, steps=steps)
+            ],
+        }
+
+    console.print(table)
+    out_path = _resolve(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    console.print(f"\n[green]Curves written to[/green] {out_path}")
 
 
 @app.command("fetch-dakshina")

@@ -107,6 +107,11 @@ def evaluate(
     goes in a table -- a bare point estimate invites "is that difference real?"
     with no answer.
     """
+    if not instances:
+        raise ValueError(
+            "Cannot evaluate an empty instance list. An empty split is almost "
+            "always a splitting bug rather than an intended experiment."
+        )
     by_id = {p.instance_id: p for p in predictions}
     missing = [i.id for i in instances if i.id not in by_id]
     if missing:
@@ -168,7 +173,10 @@ def evaluate(
         if entailed
         else 0.0
     )
-    review_load = sum(1 for p in predictions if p.label is Label.NEUTRAL) / len(predictions)
+    # Over the instances actually evaluated, not over `predictions`: a caller
+    # scoring a subset passes the full prediction list, and counting the extras
+    # would put this one rate on a different denominator from all the others.
+    review_load = sum(1 for i in instances if by_id[i.id].label is Label.NEUTRAL) / len(instances)
 
     return EvaluationReport(
         system=system,
@@ -192,6 +200,27 @@ def evaluate(
     )
 
 
+def _ranked(
+    instances: list[Instance], predictions: list[Prediction]
+) -> list[tuple[float, bool, bool]]:
+    """(confidence, correct, abstained) per instance, most confident first."""
+    if not instances:
+        raise ValueError("Cannot build a selective-prediction curve over no instances.")
+    by_id = {p.instance_id: p for p in predictions}
+    missing = [i.id for i in instances if i.id not in by_id]
+    if missing:
+        raise ValueError(f"{len(missing)} instances have no prediction, e.g. {missing[:3]}")
+    def row(instance: Instance) -> tuple[float, bool, bool]:
+        prediction = by_id[instance.id]
+        return (
+            prediction.confidence,
+            prediction.label is instance.label,
+            prediction.label is Label.NEUTRAL,
+        )
+
+    return sorted((row(i) for i in instances), key=lambda t: t[0], reverse=True)
+
+
 def risk_coverage(
     instances: list[Instance],
     predictions: list[Prediction],
@@ -205,18 +234,127 @@ def risk_coverage(
     A system whose NEUTRAL class is really a confidence threshold will show an
     identical curve to one that thresholds on confidence directly; a system
     whose NEUTRAL is structural will not.
+
+    Coverage is the fraction of instances kept, taken most-confident-first; risk
+    is the error rate among those kept. It ignores which label was predicted, so
+    it answers "is this system's confidence worth anything" and nothing more.
+    For the operational question -- how much human review does a given error
+    budget buy -- use :func:`selective_curve`.
+
+    **Ties are averaged, not ordered.** Instances sharing a confidence have no
+    defensible order between them, and a stable sort would fall back on the order
+    they arrived in. The exact-match baseline reports 1.0 for every prediction,
+    so that fallback drew it a confidently descending curve that was purely an
+    artefact of dataset order -- the most flattering possible reading of a system
+    whose confidence carries no information at all. Risk inside a tied block is
+    therefore the expectation over random orderings within it, which renders a
+    flat-confidence system as the flat line it is.
     """
-    by_id = {p.instance_id: p for p in predictions}
-    scored = sorted(
-        ((by_id[i.id].confidence, by_id[i.id].label is i.label) for i in instances),
-        key=lambda t: t[0],
-        reverse=True,
-    )
+    scored = _ranked(instances, predictions)
     n = len(scored)
+
+    # Cumulative expected errors at every cut, ties averaged within their block.
+    cumulative: list[float] = [0.0]
+    start = 0
+    while start < n:
+        end = start
+        while end < n and scored[end][0] == scored[start][0]:
+            end += 1
+        block = end - start
+        block_errors = sum(1 for _, correct, _ in scored[start:end] if not correct)
+        for taken in range(1, block + 1):
+            cumulative.append(cumulative[start] + block_errors * taken / block)
+        start = end
+
     curve: list[tuple[float, float]] = []
     for k in range(1, steps + 1):
         cut = max(1, round(n * k / steps))
-        window = scored[:cut]
-        errors = sum(1 for _, correct in window if not correct)
-        curve.append((cut / n, errors / cut))
+        curve.append((cut / n, cumulative[cut] / cut))
     return curve
+
+
+@dataclass(frozen=True)
+class OperatingPoint:
+    """One (threshold -> review load, error) trade-off on the deployment curve."""
+
+    threshold: float
+    #: Fraction of traffic a human must look at: predicted NEUTRAL, or decided
+    #: below the confidence bar.
+    review_load: float
+    #: Error rate among the cases the system decided *without* a human. This is
+    #: the number a compliance function actually constrains.
+    error_on_auto: float
+    #: Fraction of traffic decided automatically. 1 - review_load.
+    coverage: float
+    n_auto: int
+
+    def as_row(self) -> dict[str, float]:
+        return {
+            "threshold": self.threshold,
+            "review_load": self.review_load,
+            "error_on_auto": self.error_on_auto,
+            "coverage": self.coverage,
+            "n_auto": self.n_auto,
+        }
+
+
+def selective_curve(
+    instances: list[Instance],
+    predictions: list[Prediction],
+    steps: int = 20,
+) -> list[OperatingPoint]:
+    """Review load against automation error, as the confidence bar is raised.
+
+    This is the shape of the project's actual claim, and it differs from
+    :func:`risk_coverage` in one way that matters: a NEUTRAL prediction is
+    counted as *sent to a human*, never as an error and never as coverage. A
+    system that abstains structurally is therefore not punished for abstaining,
+    only for the decisions it does make -- which is how the deployed system is
+    judged.
+
+    At threshold 0 the review load is exactly the system's NEUTRAL rate, so the
+    first point on this curve reproduces the ``review_load`` already reported by
+    :func:`evaluate`, and the rest of the curve says what tightening the bar
+    beyond that would buy.
+    """
+    scored = _ranked(instances, predictions)
+    n = len(scored)
+    points: list[OperatingPoint] = []
+    for k in range(steps + 1):
+        threshold = k / steps
+        auto = [(c, ok) for c, ok, abstained in scored if not abstained and c >= threshold]
+        n_auto = len(auto)
+        errors = sum(1 for _, ok in auto if not ok)
+        points.append(
+            OperatingPoint(
+                threshold=threshold,
+                review_load=(n - n_auto) / n,
+                error_on_auto=(errors / n_auto) if n_auto else 0.0,
+                coverage=n_auto / n,
+                n_auto=n_auto,
+            )
+        )
+    return points
+
+
+def review_load_at_error(
+    instances: list[Instance],
+    predictions: list[Prediction],
+    max_error: float,
+    steps: int = 100,
+) -> OperatingPoint | None:
+    """The cheapest operating point whose automation error stays within budget.
+
+    "Cheapest" means lowest review load. Returns ``None`` when no threshold
+    meets the budget -- which is a real answer, not a failure: it says the
+    system cannot be operated at that error rate at any level of automation,
+    and reporting an infeasible budget as 100% review would hide that.
+    """
+    if not 0 <= max_error <= 1:
+        raise ValueError(f"max_error must be a rate in [0, 1], got {max_error}")
+    feasible = [
+        p
+        for p in selective_curve(instances, predictions, steps=steps)
+        if p.n_auto > 0 and p.error_on_auto <= max_error
+    ]
+    return min(feasible, key=lambda p: p.review_load) if feasible else None

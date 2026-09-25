@@ -207,7 +207,14 @@ def degrade(image: Image.Image, config: DegradeConfig, seed: int = 0) -> Image.I
     """Apply the capture-condition approximation described by ``config``."""
     out = image
     if config.rotation_deg:
-        out = out.rotate(config.rotation_deg, resample=Image.BICUBIC, fillcolor=255, expand=True)
+        # Image.BICUBIC is a deprecated alias kept alive by Pillow for now; the
+        # enum is where it actually lives.
+        out = out.rotate(
+            config.rotation_deg,
+            resample=Image.Resampling.BICUBIC,
+            fillcolor=255,
+            expand=True,
+        )
     if config.blur:
         out = out.filter(ImageFilter.GaussianBlur(config.blur))
     if config.contrast != 1.0:
@@ -217,7 +224,7 @@ def degrade(image: Image.Image, config: DegradeConfig, seed: int = 0) -> Image.I
     if config.noise_sigma:
         rng = np.random.default_rng(seed)
         arr = np.asarray(out, dtype=np.float32)
-        arr = arr + rng.normal(0.0, config.noise_sigma, arr.shape)
+        arr = (arr + rng.normal(0.0, config.noise_sigma, arr.shape)).astype(np.float32)
         out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
     if config.jpeg_quality < 95:
         buffer = io.BytesIO()

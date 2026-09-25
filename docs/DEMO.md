@@ -102,7 +102,7 @@ actually decides.
 > *"We tried to kill our own idea in week one. It survived, but only in the place
 > we weren't originally looking."*
 
-## Two questions you will get
+## Three questions you will get
 
 **"Is that difference real, or noise?"**
 Run it with the statistics on:
@@ -113,6 +113,23 @@ Run it with the statistics on:
 
 Every macro-F1 gets a 95% confidence interval and every comparison a paired
 bootstrap test. It adds about 20 seconds.
+
+**"Your model just abstains less. Isn't that only a different threshold?"**
+The sharpest question in the room, and it has a measured answer. Fix the error
+rate instead of comparing operating points:
+
+```powershell
+.\.venv\Scripts\kyc-nli.exe risk-coverage
+```
+
+At a 5% automation-error budget the rule engine **cannot operate at any
+threshold** — the best it manages is 5.2% error while sending 93% of traffic to a
+human. The cross-encoder meets that budget at its own natural operating point,
+28.6% review at 4.0% error, and still automates 51% of traffic at a 1% budget.
+The reason is in the curves: the rule engine's confidences say *which rule fired*,
+not how likely that rule is to be right, so its risk–coverage curve is not even
+monotone and there is nothing usable to threshold on.
+Full write-up: `docs/m4-selective-prediction.md`.
 
 **"Isn't this just synthetic data?"**
 Yes, and say so plainly — real identity documents are illegal to collect. Then
@@ -149,7 +166,14 @@ long training run having finished is a demo that fails in front of an audience.
 
 # The engines against real human romanisations
 .\.venv\Scripts\kyc-nli.exe translit-eval
+
+# Review load at a fixed error rate, per system (milestone M4)
+.\.venv\Scripts\kyc-nli.exe risk-coverage
 ```
+
+If asked how any of it is verified: `docs/testing.md` — 389 tests, 87% statement
+coverage, and the nine defects the edge-case pass turned up, none of which moved
+a published number.
 
 ## The slide deck
 

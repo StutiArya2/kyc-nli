@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from kyc_nli.languages import script_of
 from kyc_nli.ocr import calibrate, render
 from kyc_nli.ocr.render import DEGRADE_LEVELS, Script
 
@@ -212,3 +213,117 @@ def test_degradation_is_monotonic_in_measured_cer() -> None:
     assert cers[-1] > cers[0], f"CER did not rise across the ladder: {cers}"
     distinct = len({round(c, 3) for c in cers})
     assert distinct >= 3, f"only {distinct} distinct CERs across {len(cers)} levels: {cers}"
+
+
+# --------------------------------------------------------------------------
+# The generated module
+# --------------------------------------------------------------------------
+#
+# `measured.py` is written by `kyc-nli calibrate-ocr --write-tables` and is the
+# only reason the noise presets are measured rather than guessed. If the
+# generator emits anything Python cannot import, `kyc_nli.ocr.noise` catches the
+# ImportError and falls back to the HAND-BUILT rates -- the ones M1 proved wrong
+# in shape, not just in scale -- and says nothing. A whole ablation would run at
+# the wrong noise model with no visible symptom. These tests need no Tesseract.
+
+
+def _fake_results():
+    from collections import Counter
+
+    from kyc_nli.ocr.calibrate import CalibrationResult, LevelResult
+
+    def level(name: str, cer: float) -> LevelResult:
+        return LevelResult(
+            level=name, n_words=10, n_chars=100, cer=cer,
+            substitution_rate=cer / 2, deletion_rate=cer / 2, insertion_rate=cer / 10,
+            blank_rate=cer / 4,
+            confusions=Counter({("अ", "अा"): 5, ("ज", "ज़"): 4, ("A", "4"): 3, ("'", "\\"): 3}),
+        )
+
+    return {
+        code: CalibrationResult(
+            language=code,
+            script=script_of(code),
+            levels=[level("pristine", 0.0), level("phone_photo", 0.05),
+                    level("poor_capture", 0.2), level("severe", 0.4)],
+        )
+        for code in ("en", "hi", "ta", "bn", "ur")
+    }
+
+
+def test_the_generated_tables_module_is_importable_python(tmp_path) -> None:
+    """Executed, not just parsed: a syntactically valid module that raises on
+    import fails in exactly the same silent way."""
+    import importlib.util
+
+    from kyc_nli.ocr.calibrate import render_measured_module
+
+    source = render_measured_module(_fake_results(), words=10, seed=1)
+    path = tmp_path / "measured_generated.py"
+    path.write_text(source, encoding="utf-8")
+
+    spec = importlib.util.spec_from_file_location("measured_generated", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert set(module.MEASURED_RATES) == {"pristine", "phone_photo", "poor_capture", "severe"}
+    assert set(module.MEASURED_CONFUSIONS) == {"en", "hi", "ta", "bn", "ur"}
+    assert set(module.MEASURED_BLANK_RATES) == {"en", "hi", "ta", "bn", "ur"}
+
+
+def test_characters_that_would_break_the_source_survive_the_round_trip(tmp_path) -> None:
+    """Confusion keys come from OCR output, so they include quotes, backslashes
+    and non-BMP characters. `repr` handles them; f-string interpolation of the
+    raw character would not, and the failure would be a SyntaxError in a file
+    nobody reads."""
+    import importlib.util
+
+    from kyc_nli.ocr.calibrate import render_measured_module
+
+    source = render_measured_module(_fake_results(), words=10, seed=1)
+    path = tmp_path / "m.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("m", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    table = module.MEASURED_CONFUSIONS["hi"]
+    assert "'" in table and table["'"] == ("\\",)
+    assert table["अ"] == ("अा",)
+
+
+def test_the_committed_tables_are_present_and_the_presets_use_them() -> None:
+    """The state M1 left the repository in. If `measured.py` were ever deleted,
+    every noise-conditioned number in the write-up would silently revert to the
+    hand-built model."""
+    from kyc_nli.ocr import noise
+
+    assert noise.is_calibrated()
+    assert noise.MEASURED_RATES, "measured.py is present but carries no rates"
+    assert noise.NOISE_PRESETS["moderate"].deletion_rate == pytest.approx(
+        noise.MEASURED_RATES["poor_capture"]["deletion"]
+    )
+
+
+def test_a_confusion_table_drops_pairs_seen_too_rarely_to_be_a_pattern() -> None:
+    """A confusion seen once is noise about noise. Promoting it to the noise
+    model would encode a single OCR accident as a systematic error."""
+    from collections import Counter
+
+    from kyc_nli.ocr.calibrate import CalibrationResult, LevelResult
+
+    result = CalibrationResult(
+        language="hi",
+        script=script_of("hi"),
+        levels=[
+            LevelResult(
+                level="poor_capture", n_words=1, n_chars=10, cer=0.1,
+                substitution_rate=0.1, deletion_rate=0.0, insertion_rate=0.0,
+                blank_rate=0.0,
+                confusions=Counter({("अ", "आ"): 5, ("क", "फ"): 1}),
+            )
+        ],
+    )
+    table = result.confusion_table(min_count=3)
+    assert "अ" in table
+    assert "क" not in table

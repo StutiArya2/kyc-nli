@@ -95,7 +95,21 @@ def split_by_identity(
     3. EVERY SPLIT MUST CONTAIN EVERY LANGUAGE. Identity ids are prefixed with
        the language code, so an unstratified sort put 100% of the test set in one
        language and made the per-language breakdown meaningless.
+
+    A language with fewer than seven identities used to round to ``int(n * 0.15)
+    == 0`` and vanish from dev and test entirely -- silently, so a smoke run with
+    ``--identities 5`` produced an empty test set and every metric downstream was
+    computed over nothing. Each split now gets at least one identity per language
+    wherever three exist to share out.
     """
+    if not 0 <= dev_fraction < 1 or not 0 <= test_fraction < 1:
+        raise ValueError("dev_fraction and test_fraction must each lie in [0, 1)")
+    if dev_fraction + test_fraction >= 1:
+        raise ValueError(
+            f"dev_fraction + test_fraction must leave something for train, got "
+            f"{dev_fraction} + {test_fraction}"
+        )
+
     groups_by_language: dict[str, list[str]] = defaultdict(list)
     seen: set[str] = set()
     for inst in instances:
@@ -113,6 +127,12 @@ def split_by_identity(
         n = len(ordered)
         n_test = int(n * test_fraction)
         n_dev = int(n * dev_fraction)
+        # Three is the smallest number of identities that can fill all three
+        # splits. Below it nothing can be promised and the caller gets train
+        # only, which is at least visibly wrong rather than invisibly empty.
+        if n >= 3:
+            n_test = max(1, n_test) if test_fraction else 0
+            n_dev = max(1, n_dev) if dev_fraction else 0
         test_groups.update(ordered[:n_test])
         dev_groups.update(ordered[n_test : n_test + n_dev])
 

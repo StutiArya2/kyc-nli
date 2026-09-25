@@ -10,10 +10,10 @@ document-level NLI (entailment / contradiction / neutral) across the five
 scripts of the Indian document context: Latin, Devanagari, Tamil, Bengali and
 Perso-Arabic (en, hi, ta, bn, ur).
 
-**Current phase: M0-M3a done.** The generator, the transliteration engines, the
+**Current phase: M0-M4 done.** The generator, the transliteration engines, the
 OCR noise model (now *measured*, milestone M1), the rule baseline, the evaluation
-harness with bootstrap CIs, and the cross-encoder pipeline all work. The GPU
-fine-tune (M3b) has not been run.
+harness with bootstrap CIs, the cross-encoder pipeline and the selective-
+prediction analysis (M4) all work. The GPU fine-tune (M3b) has not been run.
 
 **The finding that governs every decision here:** the deterministic rule
 baseline reaches 0.980 macro-F1 on noise-free input. Do not propose work that
@@ -30,11 +30,14 @@ python -m venv .venv
 | Task | Command |
 | --- | --- |
 | Tests | `.venv/Scripts/python -m pytest` |
+| Tests incl. the ~1 min fine-tuning smoke test | `.venv/Scripts/python -m pytest -m slow` |
+| Coverage | `.venv/Scripts/python -m pytest --cov=kyc_nli --cov-report=term-missing` |
 | Lint | `.venv/Scripts/ruff check src tests` |
 | Autofix lint | `.venv/Scripts/ruff check --fix src tests` |
 | Types | `.venv/Scripts/mypy` |
 | Generate the benchmark | `.venv/Scripts/kyc-nli generate --identities 200 --noise moderate` |
 | Compare baselines (with CIs + paired test) | `.venv/Scripts/kyc-nli compare` |
+| Selective prediction (M4) | `.venv/Scripts/kyc-nli risk-coverage` |
 | Full report | `.venv/Scripts/kyc-nli run-baseline rule_engine` |
 | Look at real instances | `.venv/Scripts/kyc-nli inspect --language ta -n 3` |
 | Train the cross-encoder | `.venv/Scripts/python scripts/train_cross_encoder.py` |
@@ -67,6 +70,10 @@ Always run tests and lint before declaring a change done. Both are fast.
 - **Never weaken `baselines/rules.py` to make a model look better.** It is
   deliberately built to win; that is what makes the comparison credible. If a
   rule seems unfair, add the ablation, do not delete the rule.
+- **Never compare two systems on macro-F1 alone when the claim is about review
+  load.** They abstain at different rates, and macro-F1 charges nothing for the
+  human labour that abstention costs. Hold the automation error fixed and compare
+  review load: `kyc-nli risk-coverage`, `docs/m4-selective-prediction.md`.
 - **Never report a macro-F1 without its confidence interval**, and never claim
   one system beats another without a paired bootstrap. `evaluate(..., bootstrap=N)`
   and `paired_bootstrap` exist for this. A bare point estimate is an assertion.
@@ -96,6 +103,7 @@ Always run tests and lint before declaring a change done. Both are fast.
 | Why is it built this way? | `docs/decisions/` |
 | What happens next, and what could sink it? | `docs/plan.md` |
 | What is the data model? | `src/kyc_nli/schema.py` — read this first |
+| What is tested, and what did testing find? | `docs/testing.md` |
 
 ## Conventions actually in use
 
