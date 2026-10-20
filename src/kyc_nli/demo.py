@@ -12,6 +12,12 @@ here is hardcoded output; if a number on screen is wrong, the system is wrong.
 from __future__ import annotations
 
 import random
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from rich.console import Console
 from rich.panel import Panel

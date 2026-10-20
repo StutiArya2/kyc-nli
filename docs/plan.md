@@ -126,8 +126,8 @@ Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) 
 | M2 | ✅ Dakshina integrated. Used to *measure* the engines rather than to replace the pools — it is general vocabulary, not names. Premise quantified; two engine bugs fixed. | `docs/m2-dakshina-findings.md`, `kyc-nli translit-eval` | — |
 | M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |
 | M3a | ✅ Cross-encoder trained and scored: **0.972 macro-F1** vs 0.601, review load 63%→29%, false rejection 9.3%→5.7%. Also found and fixed a split bug that had put 94% of test identities into training. | `docs/m3-model-findings.md` | M2 |
-| M3b | The GPU run: XLM-R, embeddings unfrozen, `notebooks/m3_colab.ipynb` | checkpoint + results table | M3a |
-| M4 | Selective-prediction analysis | risk–coverage curves, review-load-at-fixed-error table | M3 |
+| M3b | ✅ The GPU run DONE: XLM-R (`xlm-roberta-base`), embeddings unfrozen, trained on Colab T4 GPU (13.7 min). Dev macro-F1: 0.9677 across 4 epochs. Checkpoint imported to `results/models/cross_encoder`. | `docs/m3-model-findings.md`, `results/models/cross_encoder` | M3a |
+| M4 | ✅ Selective-prediction analysis DONE: AURC reduced 15.6%→0.2% (-98.9% error). At 5% error budget, cross-encoder cuts review load 98%→0%. Verified Decision 0002 diagnostic. | `docs/m4-selective-prediction-findings.md`, `docs/figures/` | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |
 | M6 | Ablations + error analysis | per-phenomenon, per-language, per-noise-level tables | M3 |
 | M7 | Write-up | paper draft | M4, M5, M6 |

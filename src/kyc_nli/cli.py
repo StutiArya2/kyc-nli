@@ -8,7 +8,13 @@ notebook to produce a number that goes in a table, it belongs here instead.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import typer
 from rich.console import Console
@@ -22,8 +28,6 @@ from kyc_nli.data.io import load_instances, save_instances, split_by_identity, w
 from kyc_nli.evaluation import DEFAULT_RESAMPLES, evaluate, paired_bootstrap
 from kyc_nli.evaluation.transliteration import HEADER, evaluate_transliteration
 from kyc_nli.languages import load_languages, repo_root
-from kyc_nli.ocr import calibrate as ocr_calibrate
-from kyc_nli.ocr import render as ocr_render
 from kyc_nli.schema import Label
 from kyc_nli.translit import get_transliterator
 
@@ -348,6 +352,15 @@ def calibrate_ocr(
     Bengali or Perso-Arabic document, so it cannot calibrate four of our five
     languages. See docs/decisions/0006-ocr-calibration.md.
     """
+    try:
+        from kyc_nli.ocr import calibrate as ocr_calibrate
+        from kyc_nli.ocr import render as ocr_render
+    except ImportError as err:
+        raise typer.BadParameter(
+            "OCR calibration requires optional OCR dependencies (pillow, uharfbuzz, freetype-py). "
+            "Install with: pip install -e \".[ocr]\""
+        ) from err
+
     if fetch or not ocr_render.fonts_available():
         console.print("Fetching pinned Noto fonts...")
         console.print(f"[green]Fonts at[/green] {ocr_render.download_fonts()}")

@@ -74,6 +74,9 @@ htmlcov/
 *.pth
 *.safetensors
 *.onnx
+cross_encoder.zip
+/cross_encoder/
+*.tar
 wandb/
 mlruns/
 lightning_logs/
