@@ -83,7 +83,8 @@ approximate camera capture, reading it back, and aligning the result:
 | moderate | 0.096 | **0.170** | 0.024 |
 | heavy | 0.270 | **0.363** | 0.032 |
 
-**OCR deletes about 1.8× more characters than it substitutes.** That matters: a
+**OCR deletes more characters than it substitutes, at every level — by 1.3× to
+3.6×, depending on capture quality.** That matters: a
 substitution leaves something to match on, a deletion removes the evidence
 entirely.
 
@@ -235,16 +236,16 @@ function manufactures false mismatches.
 - `UrduTransliterator` extends the ICAO Doc 9303 Arabic table with the letters
   Urdu adds — and, critically, treats **ی and و as both consonants and long
   vowels** (*matres lectionis*). Adding that one linguistic fact took Urdu recall
-  from 0.086 to 0.303.
+  from 0.086 to about 0.30.
 
 **Measured against Dakshina's held-out split** — romanisations we did not choose:
 
 | Language | Finds *a* human spelling | Finds the *most common* one |
 | --- | --- | --- |
-| Hindi | 0.799 | 0.727 |
-| Tamil | 0.834 | 0.672 |
-| Bengali | 0.861 | 0.626 |
-| Urdu | 0.303 | 0.150 |
+| Hindi | 0.800 | 0.725 |
+| Tamil | 0.833 | 0.662 |
+| Bengali | 0.860 | 0.625 |
+| Urdu | 0.295 | 0.146 |
 
 ### 4.4 The OCR noise model — `src/kyc_nli/ocr/`
 
@@ -432,8 +433,8 @@ Three findings survived only because something checked them:
   contrast group — the name asserted the property, nothing tested it. Now there
   is a test.
 - **The hand-built noise model had the wrong shape.** It made substitution
-  dominant; real OCR deletes 1.8× more than it substitutes, and the hand-built
-  deletion rate was **10–17× too low**. Correcting it moved the rule engine from
+  dominant; real OCR deletes 1.3–3.6× more than it substitutes, and the
+  hand-built deletion rate was **5–17× too low**. Correcting it moved the rule engine from
   0.831 to 0.597 at moderate noise.
 - **Tamil had a phantom 0.071 error floor.** Tesseract appends an invisible
   zero-width character after Tamil words ending in a pure consonant. After
@@ -464,16 +465,19 @@ closed that.
 Each system is reported at *its own* operating point, and they abstain at
 different rates. Macro-F1 charges nothing for the human labour that abstention
 buys, and a reviewer is right to press on it. So fix the error rate instead and
-ask what each system costs to run there — `kyc-nli risk-coverage`, milestone M4:
+ask what each system costs to run there — `kyc-nli risk-coverage`, milestone M4.
+Each threshold is chosen on the dev split and applied unchanged to test; cells are
+test review load with the test error it produced (✗ = over budget):
 
 | System | err ≤ 10% | err ≤ 5% | err ≤ 2% | err ≤ 1% |
 | --- | --- | --- | --- | --- |
 | Exact match | unreachable | unreachable | unreachable | unreachable |
-| Rule engine | 91.9% review | **unreachable** | unreachable | unreachable |
-| **Cross-encoder** | **28.6%** | **28.6%** | 42.3% | 48.7% |
+| Rule engine | 63.4% (11.2% ✗) | 92.7% (5.2% ✗) | unreachable | unreachable |
+| **Cross-encoder** | **28.6% (4.0%)** | **28.6% (4.0%)** | **35.5% (1.8%)** | 41.5% (1.1% ✗) |
 
 The rule engine cannot be operated at a 5% automation-error budget *at any
-threshold*: its best is 5.2% error while sending 93% of traffic to a human. The
+threshold* — not even one tuned on the test set itself, where an exhaustive
+sweep bottoms out at 5.19% error while sending 93% of traffic to a human. The
 reason is visible in its risk–coverage curve, which is **not monotone** — its
 confidences record which rule fired, not how likely that rule is to be right, so
 there is nothing usable to threshold on. The cross-encoder's curve is monotone

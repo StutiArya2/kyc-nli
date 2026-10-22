@@ -26,10 +26,18 @@ paper grain, glare or perspective, so **every rate below is a lower bound.**
 | moderate | 0.096 / **0.170** / 0.024 | 0.080 / **0.010** / 0.010 |
 | heavy | 0.270 / **0.363** / 0.032 | 0.180 / **0.040** / 0.030 |
 
-The hand-built model made **substitution** the dominant error, roughly 8× more
+The hand-built model made **substitution** the dominant error, 4.5–8× more
 likely than deletion. Real Tesseract output on Indic scripts is the other way
-round: **deletion runs about 1.8× substitution at every level**, and the
-hand-built deletion rate was **10–17× too low**.
+round: **deletion exceeds substitution at every level, by 1.3–3.6×**, and the
+hand-built deletion rate was **5–17× too low**.
+
+> **Corrected 2026-10-21.** This paragraph previously said deletion ran "about
+> 1.8× substitution at every level" and that the hand-built rate was "10–17× too
+> low". Recomputed from the table above, the deletion/substitution ratio is
+> 3.0×, 1.8× and 1.3× at light, moderate and heavy (and 2.3× and 3.6× at the two
+> cleaner capture conditions), and the hand-built deletion rate was 5×, 17× and
+> 9× too low. 1.8× was the moderate level alone. The finding -- deletion
+> dominates at every level -- is unchanged; the constants were not.
 
 That is a qualitative error, not a calibration offset. A substitution turns a
 character into a different character, which a fuzzy matcher can often still

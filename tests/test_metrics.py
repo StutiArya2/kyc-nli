@@ -314,6 +314,61 @@ def test_a_budget_outside_zero_to_one_is_rejected() -> None:
         review_load_at_error(instances, preds, max_error=-0.1)
 
 
+def test_the_exact_search_finds_a_threshold_a_grid_steps_over() -> None:
+    """Confidences clustered just under 1.0 -- the cross-encoder's real shape.
+
+    The only cut meeting a 0% budget sits at 0.995. A 0.01 grid tries 0.99
+    (four errors in nine) and 1.00 (nothing automated), so a grid search
+    reports the budget unreachable. It is reachable, at 50% review. On the real
+    model this overstated review load at a 2% budget, 42.3% against 35.4%.
+    """
+    from kyc_nli.evaluation.metrics import selective_curve
+
+    confs = [0.999, 0.998, 0.997, 0.996, 0.995, 0.994, 0.993, 0.992, 0.991, 0.98]
+    right = [True, True, True, True, True, False, False, False, False, True]
+    instances = [mk(i, E) for i in range(10)]
+    preds = [pred(i, E if ok else C, c) for i, (c, ok) in enumerate(zip(confs, right, strict=True))]
+
+    grid = [p for p in selective_curve(instances, preds, steps=100)
+            if p.n_auto and p.error_on_auto <= 0.0]
+    assert grid == [], "precondition: the grid really does miss this one"
+
+    point = review_load_at_error(instances, preds, max_error=0.0)
+    assert point is not None
+    assert point.threshold == 0.995
+    assert point.review_load == 0.5 and point.error_on_auto == 0.0
+
+
+def test_every_operating_point_is_enumerated_once_per_distinct_confidence() -> None:
+    """A threshold cannot split a tie, so tied confidences yield ONE point."""
+    from kyc_nli.evaluation.metrics import operating_points
+
+    instances = [mk(i, E) for i in range(5)]
+    preds = [pred(0, E, 0.9), pred(1, E, 0.9), pred(2, C, 0.7), pred(3, N, 0.6), pred(4, E, 0.5)]
+    points = operating_points(instances, preds)
+    assert [p.threshold for p in points] == [0.9, 0.7, 0.5]
+    assert [p.n_auto for p in points] == [2, 3, 4]  # the NEUTRAL is never automated
+    assert points[-1].review_load == 0.2
+
+
+def test_a_dev_chosen_threshold_is_applied_unchanged_to_test() -> None:
+    """The honest half of the protocol: test error is measured, not optimised.
+
+    Tuning the threshold on the test split and then reporting test error is
+    selecting on the outcome. operating_point_at takes the threshold as given
+    and reports whatever it does -- including missing the budget.
+    """
+    from kyc_nli.evaluation.metrics import operating_point_at
+
+    instances = [mk(i, E) for i in range(4)]
+    preds = [pred(0, E, 0.95), pred(1, C, 0.92), pred(2, E, 0.80), pred(3, E, 0.60)]
+    point = operating_point_at(instances, preds, threshold=0.90)
+    assert point.n_auto == 2
+    assert point.error_on_auto == 0.5  # over budget, and reported as such
+    assert point.review_load == 0.5
+    assert operating_point_at(instances, preds, threshold=0.99).n_auto == 0
+
+
 def test_a_perfect_system_needs_no_review_at_any_budget() -> None:
     instances = [mk(i, E) for i in range(5)]
     preds = [pred(i, E, 0.99) for i in range(5)]

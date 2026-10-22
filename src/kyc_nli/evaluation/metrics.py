@@ -337,24 +337,87 @@ def selective_curve(
     return points
 
 
+def operating_points(
+    instances: list[Instance], predictions: list[Prediction]
+) -> list[OperatingPoint]:
+    """EVERY achievable operating point: one per distinct confidence value.
+
+    Any threshold strictly between two adjacent confidences selects the same
+    set of automated decisions as the upper one, so these are all the operating
+    points there are. :func:`selective_curve` samples thresholds on a grid,
+    which is fine for drawing a curve and wrong for answering "what is the best
+    this system can do" -- the grid steps over cut points. The cross-encoder's
+    confidences cluster just below 1.0, and a 0.01 grid lumped that whole
+    cluster together: it reported 42.3% review at a 2% error budget where the
+    true optimum is 35.4%.
+    """
+    scored = _ranked(instances, predictions)
+    n = len(scored)
+    decided = [(c, ok) for c, ok, abstained in scored if not abstained]
+    points: list[OperatingPoint] = []
+    errors = 0
+    for idx, (conf, ok) in enumerate(decided):
+        errors += not ok
+        # Emit once per tie block, at its end: a threshold cannot split a tie.
+        if idx + 1 == len(decided) or decided[idx + 1][0] != conf:
+            k = idx + 1
+            points.append(
+                OperatingPoint(
+                    threshold=conf,
+                    review_load=(n - k) / n,
+                    error_on_auto=errors / k,
+                    coverage=k / n,
+                    n_auto=k,
+                )
+            )
+    return points
+
+
 def review_load_at_error(
     instances: list[Instance],
     predictions: list[Prediction],
     max_error: float,
-    steps: int = 100,
 ) -> OperatingPoint | None:
     """The cheapest operating point whose automation error stays within budget.
 
-    "Cheapest" means lowest review load. Returns ``None`` when no threshold
-    meets the budget -- which is a real answer, not a failure: it says the
-    system cannot be operated at that error rate at any level of automation,
-    and reporting an infeasible budget as 100% review would hide that.
+    "Cheapest" means lowest review load, found by an EXACT search over every
+    achievable threshold (:func:`operating_points`), not a grid. Returns
+    ``None`` when no threshold meets the budget -- which is a real answer, not a
+    failure: it says the system cannot be operated at that error rate at any
+    level of automation, and reporting an infeasible budget as 100% review
+    would hide that.
+
+    The threshold is chosen on ``instances`` themselves, so on a test split this
+    is an ORACLE: the best the system could possibly do. That makes it the right
+    tool for an impossibility claim ("unreachable even with the threshold tuned
+    on the test set") and the wrong one for claiming a system meets a budget --
+    for that, choose the threshold on dev with this function and apply it to
+    test with :func:`operating_point_at`.
     """
     if not 0 <= max_error <= 1:
         raise ValueError(f"max_error must be a rate in [0, 1], got {max_error}")
-    feasible = [
-        p
-        for p in selective_curve(instances, predictions, steps=steps)
-        if p.n_auto > 0 and p.error_on_auto <= max_error
-    ]
+    feasible = [p for p in operating_points(instances, predictions) if p.error_on_auto <= max_error]
     return min(feasible, key=lambda p: p.review_load) if feasible else None
+
+
+def operating_point_at(
+    instances: list[Instance], predictions: list[Prediction], threshold: float
+) -> OperatingPoint:
+    """What a FIXED threshold does on these instances.
+
+    The honest half of a dev/test protocol: pick the threshold on dev with
+    :func:`review_load_at_error`, then report what it does here. The error on
+    test may exceed the budget it was tuned for -- that is the measurement, not
+    a bug, and it is what a deployed system would actually experience.
+    """
+    scored = _ranked(instances, predictions)
+    n = len(scored)
+    auto = [ok for c, ok, abstained in scored if not abstained and c >= threshold]
+    k = len(auto)
+    return OperatingPoint(
+        threshold=threshold,
+        review_load=(n - k) / n,
+        error_on_auto=(sum(1 for ok in auto if not ok) / k) if k else 0.0,
+        coverage=k / n,
+        n_auto=k,
+    )

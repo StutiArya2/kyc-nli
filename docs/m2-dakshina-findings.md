@@ -30,10 +30,19 @@ examples. It is now a measurement over ~30,000 words per language.
 
 | language | native words | attested spellings | spellings per word | words with **more than one** spelling |
 | --- | --- | --- | --- | --- |
-| Hindi | 29,610 | 52,466 | 1.79 | **57.0%** |
-| Tamil | 29,887 | 81,377 | 2.71 | **74.6%** |
-| Bengali | 29,715 | 112,089 | 3.67 | **90.2%** |
-| Urdu | 29,478 | 125,180 | 4.20 | **97.6%** |
+| Hindi | 29,610 | 52,466 | 1.77 | **57.0%** |
+| Tamil | 29,887 | 81,377 | 2.72 | **74.6%** |
+| Bengali | 29,715 | 112,089 | 3.77 | **90.2%** |
+| Urdu | 29,478 | 125,180 | 4.25 | **97.6%** |
+
+> **Corrected 2026-10-21.** The *spellings per word* column used to read 1.79,
+> 2.71, 3.67 and 4.20. Those were means over the 2,000-word test-split sample
+> in `results/transliteration.md`, sitting in a row whose other columns are
+> full-corpus counts -- so dividing the row's own numbers gave a different
+> answer from the one printed (Bengali: 112,089 / 29,715 = 3.77, not 3.67). The
+> column is now the full-corpus ratio, consistent with its row and with
+> Figure 2 of the paper. Every other column was already full-corpus and is
+> unchanged.
 
 **In Urdu, 98% of words have more than one human romanisation, averaging 4.2
 spellings each.** Any system that assumes one correct Latin form is wrong on
@@ -80,10 +89,16 @@ Dakshina's held-out test split instead:
 
 | language | any-recall | top1-recall | spelling-recall | mean variants emitted |
 | --- | --- | --- | --- | --- |
-| Hindi | 0.799 | 0.727 | 0.682 | 45 |
-| Tamil | 0.834 | 0.672 | 0.519 | 28 |
-| Bengali | 0.861 | 0.626 | 0.440 | 324 |
-| Urdu | **0.303** | 0.150 | 0.117 | 9 |
+| Hindi | 0.800 | 0.725 | 0.677 | 43 |
+| Tamil | 0.833 | 0.662 | 0.516 | 29 |
+| Bengali | 0.860 | 0.625 | 0.432 | 348 |
+| Urdu | **0.295** | 0.146 | 0.116 | 9 |
+
+> **Corrected 2026-10-21.** This table previously showed figures from an
+> earlier engine version (Urdu any-recall 0.303). The numbers above are what the
+> current code produces, reproducibly: `kyc-nli translit-eval` regenerates them
+> exactly and matches `results/transliteration.md`. Every change is in the
+> second or third decimal; no conclusion moves.
 
 - **any-recall** — at least one attested human spelling is in our variant set
 - **top1-recall** — the *most-attested* spelling is in our set. Stricter, and
@@ -103,10 +118,10 @@ over-generation costs precision at match time.
 
 | | hand-written pairs (old) | Dakshina test split (new) |
 | --- | --- | --- |
-| hi | 90% | 79.9% |
-| ta | 92% | 83.4% |
-| bn | 100% | 86.1% |
-| ur | 98% | **30.3%** |
+| hi | 90% | 80.0% |
+| ta | 92% | 83.3% |
+| bn | 100% | 86.0% |
+| ur | 98% | **29.5%** |
 
 Urdu is the one that matters. The old 98% was measured against pairs whose
 romanisations had been used to *build* the Urdu lexicon in the first place — a
@@ -137,7 +152,8 @@ does not distinguish the two. Reading them as consonants only gave `AAYYN` where
 people wrote `AAYEEN`, `AAIEEN`, `AAOIN` — the letters were present, we were
 refusing to read them as vowels.
 
-Adding that one linguistic fact took Urdu any-recall from **0.086 to 0.303**, a
+Adding that one linguistic fact took Urdu any-recall from **0.086 to 0.303** at
+the time (0.295 in the current engine, after the `canonical()` fix below), a
 3.5× improvement, at a cost of 9 variants per word.
 
 **A third issue, found while fixing the second:** the vowel readings broke
@@ -168,7 +184,7 @@ guess). `canonical()` now consults only the attested lexicon.
 
 - **Names specifically.** Wikidata person labels (CC0) in these four scripts would
   give a name-shaped corpus. Not started.
-- **Urdu is still weak at 0.303.** Short vowels are genuinely unwritten, so a rule
+- **Urdu is still weak at 0.295.** Short vowels are genuinely unwritten, so a rule
   engine has a ceiling here. This is the strongest single case in the project for
   a learned model, and it should be called out in the paper rather than hidden.
 - **Bengali over-generates** at 324 variants per word. Worth measuring what that

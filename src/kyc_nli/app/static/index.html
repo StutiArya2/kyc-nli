@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KYC-NLI</title>
+<style>
+/* Tokens. System colours are the same validated slots as the paper's figures,
+   so a system looks identical on a slide, in the PDF and here. */
+:root {
+  color-scheme: light;
+  --page: #f6f5f1;
+  --surface: #ffffff;
+  --sunken: #efeee9;
+  --ink: #141413;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --line-2: #cfcdc4;
+  --exact: #1baf7a;
+  --rule: #eb6834;
+  --ours: #2a78d6;
+  --good: #0b8a0b;
+  --bad: #c43232;
+  --del: #c43232;
+  --ins: #b07300;
+  --sub: #6250d6;
+  --focus: #2a78d6;
+  --radius: 10px;
+  --native: "Nirmala UI", "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali",
+            "Noto Naskh Arabic", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #121211; --surface: #1c1c1b; --sunken: #252523;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #8f8d86;
+    --line: #2f2f2c; --line-2: #3d3d39;
+    --exact: #199e70; --rule: #d95926; --ours: #3987e5;
+    --good: #2fbf2f; --bad: #ec6b6b; --del: #ec6b6b; --ins: #e0a530; --sub: #9085e9;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+/* ---- Header ---- */
+header {
+  display: flex; align-items: center; gap: 28px;
+  padding: 14px 28px; border-bottom: 1px solid var(--line); background: var(--surface);
+  position: sticky; top: 0; z-index: 5;
+}
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.brand b { font-size: 17px; letter-spacing: -0.2px; }
+.brand span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+nav { display: flex; gap: 4px; margin-left: auto; }
+nav button {
+  border: 0; background: none; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  color: var(--ink-2); font-weight: 500;
+}
+nav button[aria-selected="true"] { background: var(--sunken); color: var(--ink); }
+.status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.dot.busy { background: var(--ins); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* ---- Layout ---- */
+.view { display: none; }
+.view.on { display: grid; }
+#explore { grid-template-columns: 320px minmax(0, 1fr); min-height: calc(100vh - 57px); }
+aside {
+  border-right: 1px solid var(--line); background: var(--surface);
+  display: flex; flex-direction: column; min-height: 0;
+  position: sticky; top: 57px; height: calc(100vh - 57px);
+}
+.filters { padding: 18px 18px 12px; display: grid; gap: 14px; border-bottom: 1px solid var(--line); }
+.flabel { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); margin-bottom: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line-2); background: var(--surface); padding: 4px 10px;
+  border-radius: 99px; cursor: pointer; font-size: 12.5px; color: var(--ink-2);
+}
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+select {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--surface);
+}
+.count { font-size: 12px; color: var(--muted); padding: 10px 18px; border-bottom: 1px solid var(--line); }
+.list { overflow-y: auto; flex: 1; }
+.item {
+  display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line);
+  background: none; padding: 11px 18px; cursor: pointer;
+}
+.item:hover { background: var(--sunken); }
+.item[aria-current="true"] { background: var(--sunken); box-shadow: inset 3px 0 0 var(--ours); }
+.item .t { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.item .c { font-size: 13px; margin-top: 2px; color: var(--ink); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+main { padding: 26px 32px 60px; min-width: 0; }
+.empty { color: var(--muted); padding: 80px 0; text-align: center; }
+
+/* ---- Instance header + noise control ---- */
+.ihead { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; margin-bottom: 18px; }
+.ihead h2 { font-size: 18px; margin: 0; font-family: var(--mono); font-weight: 600; letter-spacing: -0.3px; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; padding: 2px 9px; border-radius: 6px; background: var(--sunken); color: var(--ink-2); }
+.noise { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.noise .flabel { margin: 0; }
+.seg { display: inline-flex; background: var(--sunken); border-radius: 9px; padding: 3px; }
+.seg button {
+  border: 0; background: none; padding: 5px 12px; border-radius: 7px; cursor: pointer;
+  font-size: 12.5px; color: var(--ink-2);
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); font-weight: 600; }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---- The document ---- */
+.doc {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; margin-bottom: 18px;
+}
+.docbar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 18px; border-bottom: 1px solid var(--line); }
+.docbar b { font-size: 13px; }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.zones { display: grid; grid-template-columns: 1fr 1fr; }
+.zone { padding: 6px 0 12px; }
+.zone + .zone { border-left: 1px solid var(--line); }
+.zhead { padding: 10px 18px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--muted); }
+.row { display: grid; grid-template-columns: 118px minmax(0,1fr) 54px; gap: 12px;
+  align-items: center; padding: 6px 18px; }
+.row .k { font-size: 12px; color: var(--muted); }
+.row .v { font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.row .v.native { font-family: var(--native); font-size: 19px; line-height: 1.35; }
+.row .v.latin { font-family: var(--mono); font-size: 14px; letter-spacing: .2px; }
+.row .was { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; font-family: var(--native); }
+.row .was.latin { font-family: var(--mono); }
+.row.focus { background: color-mix(in srgb, var(--ours) 7%, transparent); }
+.row.illegible .v { color: var(--muted); }
+.unread { font-family: system-ui; font-size: 12px; font-style: italic; color: var(--muted); }
+.meter { height: 5px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ink-2); border-radius: 3px; }
+.meter.low i { background: var(--del); }
+.conf { font-size: 10.5px; color: var(--muted); text-align: right; margin-top: 3px; font-variant-numeric: tabular-nums; }
+/* OCR damage, character level (Latin only -- see server._diff) */
+del.d { color: var(--del); text-decoration: line-through; text-decoration-thickness: 1.5px;
+  background: color-mix(in srgb, var(--del) 10%, transparent); border-radius: 2px; }
+ins.i { color: var(--ins); text-decoration: underline wavy; text-underline-offset: 3px;
+  background: none; }
+span.s { color: var(--sub); background: color-mix(in srgb, var(--sub) 13%, transparent);
+  border-radius: 2px; }
+.mrz { font-family: var(--mono); font-size: 12.5px; letter-spacing: 1.5px; color: var(--ink-2);
+  background: var(--sunken); padding: 10px 18px; border-top: 1px solid var(--line);
+  white-space: pre; overflow-x: auto; line-height: 1.6; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 10px 18px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-2); }
+
+/* ---- Claim ---- */
+.claim {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 18px; margin-bottom: 18px;
+}
+.claim form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.claim .pre { font-size: 15px; color: var(--ink-2); }
+.claim input {
+  flex: 1 1 220px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line-2);
+  border-radius: 8px; background: var(--surface); font-family: var(--mono); font-size: 14px;
+}
+.btn { border: 1px solid var(--line-2); background: var(--surface); padding: 8px 14px; border-radius: 8px;
+  cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: progress; }
+.gold { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; margin-top: 12px;
+  font-size: 13px; color: var(--ink-2); }
+.gold .why { color: var(--muted); font-size: 12.5px; flex: 1 1 100%; }
+.edited-note { color: var(--ins); font-size: 12.5px; }
+
+/* ---- Verdicts ---- */
+.verdicts { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  border-top: 3px solid var(--c);
+}
+.card .who { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.mark { width: 11px; height: 11px; flex: none; background: var(--c); }
+.mark.circle { border-radius: 50%; }
+.mark.tri { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.verdict { font-size: 19px; font-weight: 700; letter-spacing: .2px; }
+.bar { height: 6px; background: var(--sunken); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--c); border-radius: 3px; transition: width .35s; }
+.sub { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.outcome { font-size: 13px; font-weight: 600; }
+.outcome.good { color: var(--good); }
+.outcome.bad { color: var(--bad); }
+.outcome.unknown { color: var(--muted); font-weight: 500; }
+.rationale { font-size: 12px; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.skeleton { color: var(--muted); font-size: 13px; }
+
+/* ---- Results ---- */
+#results { padding: 28px 32px 60px; gap: 22px; max-width: 1180px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.tile .l { font-size: 12.5px; color: var(--muted); }
+.tile .n { font-size: 30px; font-weight: 600; letter-spacing: -0.5px; margin-top: 4px; }
+.tile .d { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.panel h3 { margin: 0 0 4px; font-size: 15px; }
+.panel p { margin: 0 0 14px; color: var(--ink-2); font-size: 13px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td small { color: var(--muted); }
+.fig { width: 100%; border-radius: 6px; background: #fff; }
+.figs { display: grid; gap: 18px; }
+
+@media (max-width: 1100px) {
+  #explore { grid-template-columns: 1fr; }
+  aside { position: static; height: auto; max-height: 360px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .verdicts, .tiles { grid-template-columns: 1fr; }
+  .zones { grid-template-columns: 1fr; }
+  .zone + .zone { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>KYC-NLI</b><span>Document-level inference for cross-script identity verification</span></div>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-view="explore">Explore</button>
+    <button role="tab" aria-selected="false" data-view="results">Results</button>
+  </nav>
+  <div class="status" id="status"><span class="dot busy"></span><span>Loading…</span></div>
+</header>
+
+<section class="view on" id="explore">
+  <aside>
+    <div class="filters">
+      <div><div class="flabel">Language</div><div class="chips" id="f-lang"></div></div>
+      <div><div class="flabel">Phenomenon</div><select id="f-phen"></select></div>
+      <div><div class="flabel">Gold label</div><div class="chips" id="f-label"></div></div>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="list" id="list" role="listbox" aria-label="Instances"></div>
+  </aside>
+  <main id="main"><div class="empty">Pick an instance on the left.</div></main>
+</section>
+
+<section class="view" id="results"></section>
+
+<script>
+"use strict";
+const SYS = {
+  exact_match:   { name: "Exact match",   cls: "tri",    c: "var(--exact)" },
+  rule_engine:   { name: "Rule engine",   cls: "",       c: "var(--rule)"  },
+  cross_encoder: { name: "Cross-encoder", cls: "circle", c: "var(--ours)"  },
+};
+const ORDER = ["exact_match", "rule_engine", "cross_encoder"];
+const LEVEL_NAME = { clean: "Clean", light: "Light", moderate: "Moderate", heavy: "Heavy" };
+const state = { meta: null, level: "moderate", lang: "hi", phen: "", label: "", current: null,
+                showPrinted: false, edited: null };
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+
+/* ---------- boot ---------- */
+async function boot() {
+  try { state.meta = await api("/api/meta"); }
+  catch (e) { $("#main").innerHTML = `<div class="empty">Could not reach the server: ${esc(e.message)}</div>`; return; }
+  const m = state.meta;
+  if (!m.levels.length) {
+    $("#main").innerHTML = `<div class="empty">No benchmark data found. Run <code>kyc-nli generate</code>, then <code>python scripts/noise_robustness.py</code>.</div>`;
+  }
+  if (!m.levels.includes(state.level)) state.level = m.levels[0] || "moderate";
+  renderFilters();
+  setStatus();
+  await loadList();
+  pollUntilLoaded();
+}
+
+function setStatus() {
+  const m = state.meta, el = $("#status");
+  if (m.loading) { el.innerHTML = `<span class="dot busy"></span><span>Loading models…</span>`; return; }
+  const n = m.systems.length;
+  el.innerHTML = `<span class="dot"></span><span>${n} system${n === 1 ? "" : "s"} ready</span>`;
+  el.title = m.notes.join("\n");
+}
+
+async function pollUntilLoaded() {
+  // A failed poll must not end the loop. Loading the model saturates the CPU,
+  // a request can time out, and an unguarded await here used to reject once
+  // and strand the page on "Loading models..." with the model never shown.
+  while (state.meta.loading) {
+    await new Promise((r) => setTimeout(r, 900));
+    try { state.meta = await api("/api/meta"); } catch { /* transient: try again */ }
+  }
+  setStatus();
+  if (state.current) openInstance(state.current.id, { keepEdit: false });  // pick up late systems
+}
+
+/* ---------- filters + list ---------- */
+function renderFilters() {
+  const m = state.meta;
+  $("#f-lang").innerHTML = m.languages.map((l) =>
+    `<button class="chip" data-lang="${l.code}" aria-pressed="${l.code === state.lang}">${esc(l.name)}</button>`).join("");
+  $("#f-phen").innerHTML = `<option value="">All phenomena</option>` +
+    m.phenomena.map((p) => `<option value="${p.key}">${esc(p.label)}</option>`).join("");
+  $("#f-label").innerHTML = ["", "entailment", "contradiction", "neutral"].map((l) =>
+    `<button class="chip" data-label="${l}" aria-pressed="${l === state.label}">${l ? cap(l) : "All"}</button>`).join("");
+
+  $("#f-lang").onclick = (e) => { const b = e.target.closest("[data-lang]"); if (!b) return;
+    state.lang = b.dataset.lang; renderFilters(); loadList(); };
+  $("#f-label").onclick = (e) => { const b = e.target.closest("[data-label]"); if (!b) return;
+    state.label = b.dataset.label; renderFilters(); loadList(); };
+  $("#f-phen").value = state.phen;
+  $("#f-phen").onchange = (e) => { state.phen = e.target.value; loadList(); };
+}
+
+async function loadList() {
+  const q = new URLSearchParams({ level: state.level, lang: state.lang, phenomenon: state.phen, label: state.label });
+  const rows = await api(`/api/instances?${q}`);
+  $("#count").textContent = `${rows.length} instance${rows.length === 1 ? "" : "s"} · ${LEVEL_NAME[state.level]} noise`;
+  $("#list").innerHTML = rows.map((r) => `
+    <button class="item" role="option" data-id="${esc(r.id)}" aria-current="${state.current && state.current.id === r.id}">
+      <div class="t"><span>${esc(r.phenomenon)}</span><span>${cap(r.label)}</span></div>
+      <div class="c">${esc(r.claim)}</div>
+    </button>`).join("");
+  $("#list").onclick = (e) => { const b = e.target.closest("[data-id]"); if (b) openInstance(b.dataset.id); };
+  if (rows.length && (!state.current || !rows.some((r) => r.id === state.current.id))) openInstance(rows[0].id);
+}
+
+/* ---------- one instance ---------- */
+async function openInstance(id, { keepEdit = false } = {}) {
+  try {
+    const q = new URLSearchParams({ id, level: state.level });
+    state.current = await api(`/api/instance?${q}`);
+    if (!keepEdit) state.edited = null;
+    document.querySelectorAll(".item").forEach((el) => el.setAttribute("aria-current", el.dataset.id === id));
+    renderInstance();
+    if (keepEdit && state.edited) await checkClaim(state.edited.value);
+  } catch (e) {
+    $("#main").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+
+function renderInstance() {
+  const d = state.current;
+  const viz = d.premise.filter((o) => o.zone === "viz");
+  const mrz = d.premise.filter((o) => o.zone === "mrz");
+  const levels = ["clean", "light", "moderate", "heavy"];
+  const damaged = d.premise.filter((o) => o.damaged).length;
+
+  $("#main").innerHTML = `
+    <div class="ihead">
+      <h2>${esc(d.id)}</h2>
+      <div class="tags"><span class="tag">${esc(d.language_name)}</span><span class="tag">${esc(d.phenomenon)}</span></div>
+      <div class="noise">
+        <span class="flabel">OCR noise</span>
+        <div class="seg" id="seg">${levels.map((lv) => `<button data-level="${lv}"
+          aria-pressed="${lv === state.level}" ${d.levels_available.includes(lv) ? "" : "disabled"}>${LEVEL_NAME[lv]}</button>`).join("")}</div>
+      </div>
+    </div>
+
+    <div class="doc">
+      <div class="docbar">
+        <b>The document, as the systems receive it</b>
+        <label class="toggle"><input type="checkbox" id="printed" ${state.showPrinted ? "checked" : ""}> Show what was printed</label>
+      </div>
+      <div class="zones">
+        <div class="zone"><div class="zhead">Visual zone · ${esc(d.language_name)}</div>${viz.map(rowHtml).join("")}</div>
+        <div class="zone"><div class="zhead">Machine-readable zone · Latin</div>${mrz.map(rowHtml).join("")}</div>
+      </div>
+      ${d.mrz_lines.length ? `<div class="mrz" title="The MRZ as printed, with real ICAO 9303 check digits">${d.mrz_lines.map(esc).join("\n")}</div>` : ""}
+      <div class="legend">
+        <span>${damaged} of ${d.premise.length} fields damaged by OCR</span>
+        <span><del class="d">abc</del> deleted</span>
+        <span><span class="s">abc</span> substituted</span>
+        <span><ins class="i">abc</ins> inserted</span>
+        <span>Bars: OCR confidence · red below 0.35 = unreadable</span>
+      </div>
+    </div>
+
+    <div class="claim">
+      <form id="claimform">
+        <span class="pre">Claim: ${esc(prefix(d.hypothesis.text, d.hypothesis.value))}</span>
+        <input id="claimval" value="${esc(state.edited ? state.edited.value : d.hypothesis.value)}" aria-label="Claimed value" spellcheck="false">
+        <button class="btn primary" id="check">Check claim</button>
+        <button class="btn" type="button" id="reset">Reset</button>
+      </form>
+      <div class="gold" id="gold"></div>
+    </div>
+
+    <div class="verdicts" id="verdicts"></div>`;
+
+  $("#seg").onclick = (e) => { const b = e.target.closest("[data-level]"); if (!b || b.disabled) return;
+    state.level = b.dataset.level; loadListQuiet(); openInstance(d.id, { keepEdit: true }); };
+  $("#printed").onchange = (e) => { state.showPrinted = e.target.checked; renderInstance(); };
+  $("#claimform").onsubmit = (e) => { e.preventDefault(); checkClaim($("#claimval").value); };
+  $("#reset").onclick = () => { state.edited = null; renderInstance(); };
+  renderGold();
+  renderVerdicts(state.edited ? state.edited.predictions : d.predictions, !!state.edited);
+}
+
+async function loadListQuiet() {
+  const q = new URLSearchParams({ level: state.level, lang: state.lang, phenomenon: state.phen, label: state.label });
+  const rows = await api(`/api/instances?${q}`);
+  $("#count").textContent = `${rows.length} instance${rows.length === 1 ? "" : "s"} · ${LEVEL_NAME[state.level]} noise`;
+}
+
+function rowHtml(o) {
+  const d = state.current;
+  const isFocus = o.field === d.hypothesis.field;
+  const cls = `row${isFocus ? " focus" : ""}${o.illegible ? " illegible" : ""}`;
+  let value;
+  if (!o.observed.trim()) value = `<span class="unread">nothing read</span>`;
+  else if (o.latin && o.damaged) value = diffHtml(o.diff);
+  else value = esc(o.observed);
+  const kind = o.latin ? "latin" : "native";
+  const was = state.showPrinted && o.damaged
+    ? `<span class="was ${kind}" dir="auto">printed: ${esc(o.clean)}</span>` : "";
+  const low = o.confidence < 0.35 ? " low" : "";
+  return `<div class="${cls}">
+    <div class="k">${esc(o.field_label)}${o.illegible ? `<div class="unread">unreadable</div>` : ""}</div>
+    <div class="v ${kind}" dir="auto">${value}${was}</div>
+    <div><div class="meter${low}"><i style="width:${Math.round(o.confidence * 100)}%"></i></div>
+      <div class="conf">${o.confidence.toFixed(2)}</div></div>
+  </div>`;
+}
+
+function diffHtml(segs) {
+  return segs.map((s) => {
+    if (s.op === "equal") return esc(s.text);
+    if (s.op === "delete") return `<del class="d" title="OCR lost this">${esc(s.text)}</del>`;
+    if (s.op === "insert") return `<ins class="i" title="OCR invented this">${esc(s.text)}</ins>`;
+    return `<span class="s" title="was ${esc(s.was)}">${esc(s.text)}</span>`;
+  }).join("");
+}
+
+function renderGold() {
+  const d = state.current, el = $("#gold");
+  if (state.edited) {
+    el.innerHTML = `<span class="edited-note">Edited claim — no gold label exists for it, so no verdict is marked right or wrong.</span>`;
+    return;
+  }
+  el.innerHTML = `<span>Gold: <b>${cap(d.gold)}</b></span><span class="why">${esc(d.rationale)}</span>`;
+}
+
+function renderVerdicts(preds, edited) {
+  const names = ORDER.filter((n) => preds && preds[n]);
+  if (!names.length) {
+    $("#verdicts").innerHTML = `<div class="skeleton">${state.meta.loading ? "Loading models…" : "No systems available."}</div>`;
+    return;
+  }
+  $("#verdicts").innerHTML = names.map((n) => {
+    const p = preds[n], s = SYS[n];
+    let outcome = "";
+    if (edited || p.correct === null) outcome = `<div class="outcome unknown">No gold for an edited claim</div>`;
+    else if (p.correct) outcome = `<div class="outcome good">✓ Correct</div>`;
+    else outcome = `<div class="outcome bad">✗ Wrong${p.label === "contradiction" && state.current.gold === "entailment" ? " — rejects a real customer" : ""}</div>`;
+    const deferred = p.label === "neutral" ? `<div class="rationale">Routed to a human reviewer.</div>` : "";
+    return `<div class="card" style="--c:${s.c}">
+      <div class="who"><span class="mark ${s.cls}"></span>${s.name}</div>
+      <div class="verdict">${cap(p.label)}</div>
+      <div><div class="bar"><i style="width:${Math.round(p.confidence * 100)}%"></i></div>
+        <div class="sub"><span>confidence</span><span>${p.confidence.toFixed(3)}</span></div></div>
+      ${outcome}${deferred}
+      <div class="rationale">${esc(p.rationale)}</div>
+    </div>`;
+  }).join("");
+}
+
+async function checkClaim(value) {
+  const btn = $("#check");
+  if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+  try {
+    const r = await api("/api/predict", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: state.current.id, level: state.level, value }) });
+    const unchanged = value.trim() === state.current.hypothesis.value;
+    state.edited = unchanged ? null : r;
+    renderInstance();
+  } catch (e) {
+    $("#gold").innerHTML = `<span class="outcome bad">${esc(e.message)}</span>`;
+  } finally {
+    const b = $("#check"); if (b) { b.disabled = false; b.textContent = "Check claim"; }
+  }
+}
+
+/* ---------- results ---------- */
+async function renderResults() {
+  const el = $("#results");
+  let r;
+  try { r = await api("/api/results"); } catch { r = {}; }
+  const noise = r.noise, sel = r.selective;
+  if (!noise) {
+    el.innerHTML = `<div class="empty">No results yet. Run <code>python scripts/noise_robustness.py</code>.</div>`;
+    return;
+  }
+  const lv = noise.levels, at = noise.trained_at || "moderate";
+  const f = (x) => x.toFixed(3), pct = (x) => (100 * x).toFixed(1) + "%";
+  const o = (s) => lv[at][s];
+  const tiles = [
+    ["Cross-encoder macro-F1", f(o("cross_encoder").macro_f1), `vs ${f(o("rule_engine").macro_f1)} for the rule engine`],
+    ["Sent to a human", pct(o("cross_encoder").review_load), `vs ${pct(o("rule_engine").review_load)}; ${pct(o("cross_encoder").review_load)} is the floor`],
+    ["Real customers rejected", pct(o("cross_encoder").false_mismatch_rate), `vs ${pct(o("exact_match").false_mismatch_rate)} for exact match`],
+    ["On heavy noise it never saw", f(lv.heavy.cross_encoder.macro_f1), `rule engine falls to ${f(lv.heavy.rule_engine.macro_f1)}`],
+  ];
+  const rows = ORDER.filter((s) => lv.moderate[s]).map((s) => `<tr><td>${SYS[s].name}</td>${
+    ["clean", "light", "moderate", "heavy"].map((l) => { const x = lv[l][s];
+      return `<td>${f(x.macro_f1)} <small>[${f(x.macro_f1_ci[0])}, ${f(x.macro_f1_ci[1])}]</small></td>`; }).join("")}</tr>`).join("");
+  el.innerHTML = `
+    <div class="tiles">${tiles.map(([l, n, d]) => `<div class="tile"><div class="l">${l}</div><div class="n">${n}</div><div class="d">${d}</div></div>`).join("")}</div>
+    <div class="panel"><h3>Same documents, every noise level</h3>
+      <p>The 1,050 held-out instances are identical at every level; only the OCR damage changes. Macro-F1 with 95% bootstrap intervals over contrast groups. The cross-encoder was trained at ${LEVEL_NAME[at].toLowerCase()} noise only.</p>
+      <table><thead><tr><th>System</th><th>Clean</th><th>Light</th><th>Moderate</th><th>Heavy</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="figs">
+      ${["fig1_task", "fig4_selective", "fig3_noise", "fig5_phenomena", "fig2_motivation"].map((n) =>
+        `<div class="panel"><img class="fig" src="/figures/${n}.png" alt="${n}" loading="lazy" onerror="this.parentElement.remove()"></div>`).join("")}
+    </div>`;
+}
+
+/* ---------- utils ---------- */
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+function prefix(text, value) { const i = text.lastIndexOf(value); return i > 0 ? text.slice(0, i).trimEnd() : "The holder's value is"; }
+
+document.querySelector("nav").onclick = (e) => {
+  const b = e.target.closest("[data-view]"); if (!b) return;
+  document.querySelectorAll("nav button").forEach((x) => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === b.dataset.view));
+  if (b.dataset.view === "results") renderResults();
+};
+boot();
+</script>
+</body>
+</html>

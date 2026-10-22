@@ -51,6 +51,13 @@ ocr = [
     "uharfbuzz>=0.39",
     "freetype-py>=2.4",
 ]
+# Paper figures (milestone M7). Optional because nothing in the pipeline needs
+# it: figures are rendered from results/*.json after the fact, never during a run.
+#   pip install -e ".[paper]"
+#   python scripts/make_figures.py
+paper = [
+    "matplotlib>=3.8",
+]
 # Optional higher-fidelity transliteration backends.
 translit = [
     "pypinyin>=0.51",
@@ -74,7 +81,8 @@ where = ["src"]
 # all -- `mypy` exited on "missing py.typed marker", so the command CLAUDE.md
 # advertises was checking nothing.
 [tool.setuptools.package-data]
-kyc_nli = ["py.typed"]
+# The web interface ships its one HTML file inside the package.
+kyc_nli = ["py.typed", "app/static/*.html"]
 
 [tool.ruff]
 line-length = 100

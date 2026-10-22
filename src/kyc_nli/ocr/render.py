@@ -179,23 +179,42 @@ def render(text: str, script: Script, size_px: int = 40, padding: int = 16) -> I
     width = int(pen_x) + 2 * padding
     height = int(size_px * 2.2) + 2 * padding
     baseline = int(size_px * 1.45) + padding
-    canvas = np.full((height, max(width, 1)), 255, dtype=np.uint8)
 
+    # Rasterise every glyph and place it relative to that advance-sized canvas.
+    glyphs: list[tuple[np.ndarray, int, int]] = []
     for gid, x, y in boxes:
         face.load_glyph(gid, freetype.FT_LOAD_RENDER)
         bitmap = face.glyph.bitmap
         if bitmap.width == 0 or bitmap.rows == 0:
             continue
         glyph = np.array(bitmap.buffer, dtype=np.uint8).reshape(bitmap.rows, bitmap.pitch)
-        glyph = glyph[:, : bitmap.width]
+        glyphs.append(
+            (
+                glyph[:, : bitmap.width],
+                int(x) + padding + face.glyph.bitmap_left,
+                baseline - face.glyph.bitmap_top - int(y),
+            )
+        )
 
-        gx = int(x) + padding + face.glyph.bitmap_left
-        gy = baseline - face.glyph.bitmap_top - int(y)
-        if gx < 0 or gy < 0:
-            continue
+    # GROW the canvas to fit any glyph that overhangs it; never drop the glyph.
+    #
+    # Marks such as the Devanagari reph and ी overhang their advance width, by an
+    # amount that grows with the font size. This used to `continue` past any
+    # glyph that would not fit, so at large sizes with small padding the reph and
+    # the vowel sign simply vanished -- चटर्जी drew as चटज, with no error. The
+    # margins below are zero whenever nothing overhangs, so every render that was
+    # already complete is byte-identical to before. That was checked against all
+    # 4,200 renders the M1 calibration made (none had lost a glyph), so
+    # ocr/measured.py and the calibrated noise model are unaffected.
+    left = max([0] + [-gx for _, gx, _ in glyphs])
+    top = max([0] + [-gy for _, _, gy in glyphs])
+    right = max([0] + [gx + g.shape[1] - width for g, gx, _ in glyphs])
+    bottom = max([0] + [gy + g.shape[0] - height for g, _, gy in glyphs])
+    canvas = np.full((height + top + bottom, max(width + left + right, 1)), 255, dtype=np.uint8)
+
+    for glyph, gx, gy in glyphs:
+        gx, gy = gx + left, gy + top
         gh, gw = glyph.shape
-        if gy + gh > canvas.shape[0] or gx + gw > canvas.shape[1]:
-            continue
         region = canvas[gy : gy + gh, gx : gx + gw]
         # Glyph coverage is alpha; composite black ink onto white.
         canvas[gy : gy + gh, gx : gx + gw] = np.minimum(region, 255 - glyph)

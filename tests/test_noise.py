@@ -2,7 +2,7 @@
 
 This model decides how hard the benchmark is, so its failure modes are not
 crashes -- they are numbers that move. Milestone M1 already found the
-hand-built version wrong in *shape*: deletion was 10-17x too low, and correcting
+hand-built version wrong in *shape*: deletion was 5-17x too low, and correcting
 it moved the rule engine from 0.831 to 0.597 at moderate noise. These tests pin
 the properties that a future edit could break without anything looking amiss.
 """

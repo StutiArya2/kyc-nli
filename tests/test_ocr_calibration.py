@@ -161,6 +161,36 @@ def test_devanagari_vowel_sign_reorders() -> None:
 
 
 @needs_fonts
+@pytest.mark.parametrize(
+    "text,script",
+    [
+        ("चटर्जी", Script.DEVANAGARI),  # reph above, ी overhanging to the right
+        ("বন্দ্যোপাধ্যায়", Script.BENGALI),
+        ("சுப்ரமணியன்", Script.TAMIL),
+        ("صدیقی", Script.ARABIC),
+    ],
+)
+@pytest.mark.parametrize("size_px,padding", [(160, 0), (160, 4), (32, 0), (22, 16)])
+def test_no_glyph_is_ever_dropped_for_overhanging_the_canvas(
+    text: str, script: Script, size_px: int, padding: int
+) -> None:
+    """Whatever the padding, a render must carry all of the word's ink.
+
+    The canvas is sized from advance widths, and marks like the reph and ी
+    overhang their advance. render() used to skip any glyph that did not fit,
+    so at 160px with padding 4 चटर्जी drew as चटज -- 23% of its ink gone, no
+    error raised. Ink is compared against a render with padding too large for
+    anything to overhang.
+    """
+    def ink(img) -> int:
+        return int((np.asarray(img) < 128).sum())
+
+    got = ink(render.render(text, script, size_px=size_px, padding=padding))
+    want = ink(render.render(text, script, size_px=size_px, padding=size_px * 3))
+    assert got == want, f"lost {want - got} of {want} ink pixels"
+
+
+@needs_fonts
 def test_degradation_monotonically_damages_the_image() -> None:
     """Pixel-level damage must increase with level.
 

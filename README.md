@@ -129,7 +129,8 @@ Holding the automation error rate fixed rather than comparing systems at their o
 operating points, the rule engine **cannot reach a 5% error budget at any
 threshold**: the best it manages is 5.2% while sending 93% of traffic to a human.
 The cross-encoder meets that budget at its own operating point, 28.6% review at
-4.0% error, and still automates 51% of traffic at a 1% budget. The rule engine's
+4.0% error, and with a threshold chosen on dev it meets a 2% budget on test at
+35.5% review. The rule engine's
 risk–coverage curve is not even monotone — its confidences encode *which rule
 fired*, not how likely that rule is to be right, so there is nothing usable to
 threshold on.
@@ -138,7 +139,7 @@ Caveat, now discharged: the noise model used to be hand-built from documented
 per-script OCR failure modes rather than calibrated against a real engine
 ([decision 0004](docs/decisions/0004-ocr-noise-is-simulated.md)). Milestone M1
 measured it, and the hand-built version was wrong in *shape* — deletion ran
-10–17× too low. The numbers above are the post-calibration ones. What remains
+5–17× too low. The numbers above are the post-calibration ones. What remains
 uncalibrated is the gap between rendered text and a real photographed document:
 these rates are a lower bound on real-document error.
 
@@ -260,13 +261,17 @@ the repo run on a clean checkout with zero downloads.
 | Live demo | `.\demo.ps1` |
 | Full report for one system | `kyc-nli run-baseline rule_engine` |
 | Selective prediction (M4) | `.venv/Scripts/kyc-nli risk-coverage` |
+| Noise robustness, same documents at every level | `.venv/Scripts/python scripts/noise_robustness.py` |
+| Paper figures and tables | `scripts/make_figures.py`, then `scripts/make_tables.py` (see `paper/README.md`) |
+| Interactive explorer in the browser | `.venv/Scripts/kyc-nli serve` |
+| Presenter guide as PDF + Word | `.venv/Scripts/python scripts/build_presenter_docs.py` |
 | Noise ablation (README table) | `scripts/run_noise_ablation.ps1` |
 | Fetch Dakshina (~2 GB, once) | `.venv/Scripts/kyc-nli fetch-dakshina` |
 | Calibrate the OCR noise model | `.venv/Scripts/kyc-nli calibrate-ocr --fetch` (needs Tesseract) |
 | Train the cross-encoder (CPU, ~2h) | `.venv/Scripts/python scripts/train_cross_encoder.py` |
 | Train it properly (GPU, ~10 min) | [`notebooks/m3_colab.ipynb`](notebooks/m3_colab.ipynb) |
 | Score engines vs. human romanisations | `.venv/Scripts/kyc-nli translit-eval` |
-| Test suite (389 tests) | `.venv/Scripts/python -m pytest` |
+| Test suite (409 tests) | `.venv/Scripts/python -m pytest` |
 | Test suite with coverage | `.venv/Scripts/python -m pytest --cov=kyc_nli --cov-report=term-missing` |
 | The slow fine-tuning smoke test | `.venv/Scripts/python -m pytest -m slow` |
 | Rebuild the mid-review deck | `node scripts/build_midreview_deck.js` (needs `npm install pptxgenjs`) |
@@ -290,7 +295,8 @@ docs/
   literature/     citation-audit.md -- all 12 references checked against source
   HOW-IT-WORKS.md full technical walkthrough, end to end
   DEMO.md         presenter notes for the live walkthrough
-  testing.md      what is verified, and the 9 defects the edge-case pass found
+  testing.md      what is verified, and the 15 defects testing turned up
+  PRESENTER-GUIDE.md  the plain-English walkthrough for presenting the project
   m1-*, m2-*, m3-*, m4-*  per-milestone findings
 notebooks/        exploratory only, numbered, outputs stripped
 src/kyc_nli/
@@ -314,7 +320,7 @@ results/          metrics + figures, gitignored except MANIFEST.md
 - [x] **M0** Schema, generator, MRZ encoder, transliteration engines, OCR noise model, rule baseline, evaluation harness
 - [x] Phase-0 pilot and go/no-go signal
 - [x] Bootstrap confidence intervals and paired significance testing
-- [x] **M1** Noise model calibrated against Tesseract ([findings](docs/m1-ocr-calibration-findings.md)). The hand-built model had deletion 10–17× too low; measured rates are now in `kyc_nli.ocr.measured`
+- [x] **M1** Noise model calibrated against Tesseract ([findings](docs/m1-ocr-calibration-findings.md)). The hand-built model had deletion 5–17× too low; measured rates are now in `kyc_nli.ocr.measured`
 - [ ] **M1b** Re-run Urdu in Nastaliq, and a second OCR engine, to separate font/engine limits from script difficulty
 - [x] **M2** Dakshina integrated — engines measured against human romanisations ([findings](docs/m2-dakshina-findings.md))
 - [ ] **M2b** A *name*-shaped corpus (Wikidata person labels); Dakshina is general vocabulary

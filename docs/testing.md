@@ -6,12 +6,12 @@
 
 | | before the edge-case pass | after |
 | --- | --- | --- |
-| tests | 94 | **389** |
+| tests | 94 | **409** |
 | statement coverage | 75% | **87%** (90% with the slow test) |
 | modules with no test at all | 6 | **0** |
-| defects found | — | **9** |
+| defects found | — | **15** (9 in the edge-case pass, 6 while building the paper) |
 
-The nine defects are the substance of this document. A test suite that finds
+The fifteen defects are the substance of this document. A test suite that finds
 nothing is a suite that was written to agree with the code.
 
 ---
@@ -158,6 +158,104 @@ first real run:
   cross-encoder exposes the same one as the baselines — which is the property that
   makes the comparison checkable at all. Now a `NLISystem` Protocol in
   `kyc_nli.baselines`.
+
+---
+
+## Found while building the paper (2026-10-21)
+
+Writing a paper means recomputing every number from scratch and putting it in
+front of a reader who will recompute it again. That turned up six more defects.
+**None changes a published headline** -- each was checked by re-running the
+published comparison, which reproduces every macro-F1, interval and paired test
+to the digit.
+
+### 10. The text renderer silently dropped glyphs that overhung the canvas
+
+`ocr/render.py` sized its canvas from advance widths, then **skipped** -- did not
+clip, skipped -- any glyph whose bitmap did not fit. Marks like the Devanagari
+reph and ी overhang their advance by an amount that grows with font size, so at
+160px with 4px padding चटर्जी rendered as चटज: 23% of its ink gone, no error.
+
+This renderer produces the ground-truth images for the M1 OCR calibration, so the
+first question was whether M1 was affected. If it had been, Tesseract would have
+been scored as "deleting" characters that were never drawn -- inflating exactly
+the deletion rate M1's finding rests on. It was not: all 4,200 calibration
+renders were re-rendered with padding large enough that nothing could overhang,
+and **0 of 4,200 had lost ink**. At calibration sizes (22-32px, padding 16) the
+overhang never exceeds the padding.
+
+The canvas now grows to fit an overhanging glyph. Because it grows only when
+something overhangs, all 4,200 calibration renders are **byte-identical** to
+before -- verified pixel for pixel against the committed version -- so
+`ocr/measured.py` and every noise-conditioned result stand.
+`tests/test_ocr_calibration.py::test_no_glyph_is_ever_dropped_for_overhanging_the_canvas`
+fails on the old renderer and passes on the new one.
+
+### 11. A confidence interval depended on the order the data arrived in
+
+The bootstrap resamples contrast groups by position, and built the group list in
+arrival order. The same split, the same predictions and the same seed therefore
+gave **[0.566, 0.637]** when evaluated straight from the generator (shuffled) and
+**[0.565, 0.640]** when read back from disk (sorted). A confidence interval that
+moves when a file is reordered is not reproducible.
+
+Groups are now sorted by id. Group ids are fixed-format, so sorted order is the
+order an id-sorted file always produced, and **every published interval is
+unchanged** -- confirmed by re-running `kyc-nli compare`. The existing
+determinism test held the order fixed, which is exactly why it never saw this.
+`tests/test_significance.py::test_the_interval_does_not_depend_on_the_order_instances_arrive_in`
+fails on the old code.
+
+### 12. The review-load search stepped over the optimal threshold
+
+`review_load_at_error` searched thresholds on a 0.01 grid. The cross-encoder's
+confidences cluster just below 1.0, and the grid lumped that whole cluster
+together: it reported **42.3%** review at a 2% error budget where the true
+optimum is **35.4%**, and 48.7% at 1% where it is 43.8%. The search is now exact,
+over every distinct confidence (`operating_points`). The rule engine's numbers,
+and every "unreachable" verdict, were unaffected -- re-checked by exhaustive
+sweep over all 37 of its distinct confidences.
+`tests/test_metrics.py::test_the_exact_search_finds_a_threshold_a_grid_steps_over`.
+
+### 13. Abstention thresholds were tuned on the test set
+
+Both the grid and the exact search choose the threshold on the split they then
+report on. That is the most favourable setting possible -- fine for a claim that
+something is **impossible** ("the rule engine cannot reach 5% error even with a
+test-tuned threshold"), and wrong for a claim that a system **meets** a budget.
+`kyc-nli risk-coverage` now chooses thresholds on dev and applies them unchanged
+to test (`operating_point_at`), and reports the error that actually results,
+including when it overshoots. See `docs/m4-selective-prediction.md`.
+
+### 14. Stale and miscomputed numbers in the findings documents
+
+Recomputing every figure for the paper exposed five numbers in the docs that did
+not match the data they described:
+
+| Claim | Was | Is | Why it was wrong |
+| --- | --- | --- | --- |
+| deletion ÷ substitution | "about 1.8× at every level" | **1.3–3.6×** | 1.8× was the moderate level alone |
+| hand-built deletion error | "10–17× too low" | **5–17×** | the doc's own table gives 5×, 17×, 9× |
+| hand-built sub ÷ del | "roughly 8×" | **4.5–8×** | 8× was the moderate level alone |
+| Bengali spellings per word | 3.67 | **3.77** | a 2,000-word sample mean in a row of full-corpus counts |
+| Urdu transliteration recall | 0.303 | **0.295** | from an earlier engine version; current code reproduces 0.295 |
+
+Each is corrected in place with a dated note. No conclusion moves: deletion
+still dominates at every level, and Urdu is still the weakest script.
+
+### 15. The noise-ablation datasets leak identities -- unusable for a trained model
+
+The `abl_{clean,light,moderate,heavy}` datasets predate the identity-level split
+fix: they carry no `identity_id`, and **253 of their 616 test instances (41%)
+share a document number with the cross-encoder's training set**. The rule
+baselines are untrained, so their published ablation numbers stand. A trained
+model must never be scored on those files.
+
+`scripts/noise_robustness.py` measures the model across noise levels instead by
+regenerating synth_v0's exact config at each preset. The generator's identity
+sampling is independent of the noise preset, so every level yields the
+**identical** 1,050 held-out instances -- same ids, same gold labels, same
+document numbers, zero training overlap -- asserted in the script, not assumed.
 
 ---
 

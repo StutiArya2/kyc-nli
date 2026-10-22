@@ -38,6 +38,9 @@ python -m venv .venv
 | Generate the benchmark | `.venv/Scripts/kyc-nli generate --identities 200 --noise moderate` |
 | Compare baselines (with CIs + paired test) | `.venv/Scripts/kyc-nli compare` |
 | Selective prediction (M4) | `.venv/Scripts/kyc-nli risk-coverage` |
+| Noise robustness (model across noise levels) | `.venv/Scripts/python scripts/noise_robustness.py` |
+| Paper: figures, tables, structural check | `scripts/make_figures.py`, `scripts/make_tables.py`, `scripts/check_paper.py` |
+| Interactive explorer | `.venv/Scripts/kyc-nli serve` |
 | Full report | `.venv/Scripts/kyc-nli run-baseline rule_engine` |
 | Look at real instances | `.venv/Scripts/kyc-nli inspect --language ta -n 3` |
 | Train the cross-encoder | `.venv/Scripts/python scripts/train_cross_encoder.py` |
@@ -85,6 +88,14 @@ Always run tests and lint before declaring a change done. Both are fast.
   the variant sets are the rule baseline's central advantage. Either would make a
   win over that baseline uninterpretable. `leaks_ground_truth` and
   `tests/test_nli_dataset.py` guard this.
+- **Never score a trained model on the `abl_*` datasets.** They predate the
+  identity-level split and 41% of their test documents are in the cross-encoder's
+  training set. The rule baselines are untrained, so their ablation numbers
+  stand. For a model across noise levels use `scripts/noise_robustness.py`,
+  which holds the held-out documents fixed and asserts zero training overlap.
+- **Never choose an abstention threshold on the split you report.** Choose it on
+  dev and apply it to test (`operating_point_at`). Test-tuned "oracle" points
+  license only impossibility claims.
 - **Never let `kyc-nli demo` require an optional component.** It is run live in
   front of an audience; a missing model, corpus or dataset must degrade to a
   printed note, never an exception. `tests/test_demo.py` guards every degraded

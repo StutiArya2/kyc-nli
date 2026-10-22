@@ -125,7 +125,9 @@ rate instead of comparing operating points:
 At a 5% automation-error budget the rule engine **cannot operate at any
 threshold** — the best it manages is 5.2% error while sending 93% of traffic to a
 human. The cross-encoder meets that budget at its own natural operating point,
-28.6% review at 4.0% error, and still automates 51% of traffic at a 1% budget.
+28.6% review at 4.0% error, and meets a 2% budget at 35.5% review. (Thresholds
+are chosen on the dev split and tested on the held-out split, so it is not tuned
+to the data it is scored on — expect that question.)
 The reason is in the curves: the rule engine's confidences say *which rule fired*,
 not how likely that rule is to be right, so its risk–coverage curve is not even
 monotone and there is nothing usable to threshold on.
@@ -154,6 +156,11 @@ long training run having finished is a demo that fails in front of an audience.
 
 ## Deeper dives, if asked
 
+**Run these from the repo root, and use the `.\.venv\Scripts\` prefix.**
+`kyc-nli` is installed inside the virtual environment, not on the system
+PATH, so a bare `kyc-nli ...` gives "not recognized as the name of a
+cmdlet" — which is a bad thing to discover in front of a room.
+
 ```powershell
 # Read actual benchmark instances, in any language
 .\.venv\Scripts\kyc-nli.exe inspect --language ta -n 2
@@ -171,8 +178,8 @@ long training run having finished is a demo that fails in front of an audience.
 .\.venv\Scripts\kyc-nli.exe risk-coverage
 ```
 
-If asked how any of it is verified: `docs/testing.md` — 389 tests, 87% statement
-coverage, and the nine defects the edge-case pass turned up, none of which moved
+If asked how any of it is verified: `docs/testing.md` — 409 tests, 87% statement
+coverage, and the fifteen defects testing turned up, none of which moved
 a published number.
 
 ## The slide deck

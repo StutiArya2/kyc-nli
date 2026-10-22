@@ -121,7 +121,7 @@ def test_a_long_name_does_not_explode_the_variant_set(language: str) -> None:
 
 def test_urdu_and_arabic_share_a_script_but_not_an_engine() -> None:
     """Dispatching on script alone gives Urdu names the Arabic treatment, which
-    loses the ye/vao vowel readings that took Urdu recall from 0.086 to 0.303."""
+    loses the ye/vao vowel readings that took Urdu recall from 0.086 to ~0.30."""
     urdu = get_transliterator(Script.ARABIC, "ur")
     arabic = get_transliterator(Script.ARABIC, "ar")
     assert type(urdu) is not type(arabic)

@@ -43,22 +43,46 @@ an error would score the safest possible system as the worst one.
 measured noise. "Error" is the error rate among cases decided **without** a
 human; "review load" is the fraction of traffic routed to one.
 
+> **Revised 2026-10-22.** The first version of this table chose each threshold
+> on the test split, by a 0.01 grid. Both were wrong for the claims made from
+> it: a grid steps over cut points (it overstated the cross-encoder's review
+> load at a 2% budget, 42.3% against a true 35.4%), and a threshold tuned on the
+> split it is reported on flatters whichever system is tuned. Thresholds are now
+> found by **exact search** and chosen on **dev**, then applied unchanged to
+> test. The test-tuned "oracle" is kept below, for impossibility claims only.
+
+**Thresholds chosen on dev, applied to test** -- cells are test review load, with
+the test error the threshold actually produced:
+
 | system | its own point | err ≤ 10% | err ≤ 5% | err ≤ 2% | err ≤ 1% |
 | --- | --- | --- | --- | --- | --- |
 | exact match | 0% review @ **54.2% error** | unreachable | unreachable | unreachable | unreachable |
-| rule engine | 63.4% review @ 11.2% error | 91.9% | **unreachable** | unreachable | unreachable |
-| **cross-encoder** | 28.6% review @ **4.0% error** | **28.6%** | **28.6%** | 42.3% | 48.7% |
+| rule engine | 63.4% review @ 11.2% error | 63.4% (11.2% ✗) | 92.7% (5.2% ✗) | unreachable | unreachable |
+| **cross-encoder** | 28.6% review @ **4.0% error** | **28.6% (4.0%)** | **28.6% (4.0%)** | **35.5% (1.8%)** | 41.5% (1.1% ✗) |
 
-Read the rule-engine row twice. It is already sending **63% of all traffic to a
-human**, and the 37% it decides by itself is still **11.2% wrong**. To reach a
-10% error budget it must review 91.9%. It never reaches 5% at any threshold — the
-best it manages is 5.2% while reviewing 92.7% of traffic, which is not a system,
-it is a queue with a cover sheet.
+✗ = the dev-chosen threshold overshoots the budget on test.
+
+**Oracle: thresholds tuned on the test split itself** -- the best each system
+could possibly do, by exhaustive search:
+
+| system | err ≤ 10% | err ≤ 5% | err ≤ 2% | err ≤ 1% |
+| --- | --- | --- | --- | --- |
+| rule engine | 91.9% | **unreachable** (best: 5.19%) | unreachable | unreachable |
+| cross-encoder | 28.6% | 28.6% | 35.4% | 43.8% |
+
+Read the rule-engine rows twice. It is already sending **63% of all traffic to a
+human**, and the 37% it decides by itself is still **11.2% wrong**. With
+thresholds chosen on dev it misses every budget on test. And even the oracle --
+the most generous setting there is -- cannot get it to 5%: an exhaustive sweep
+over all 37 of its distinct confidence values bottoms out at 5.19%, while
+reviewing 92.7% of traffic. That is not a system, it is a queue with a cover
+sheet.
 
 The cross-encoder meets the 10% and 5% budgets *at its own natural operating
 point*: no threshold tuning is needed, because 28.6% review already delivers 4.0%
-error. Tightening to a 1% error budget still leaves **51.3% of traffic
-automated**.
+error. A dev-chosen 2% threshold holds on test (35.5% review, 1.8% error). At 1%
+it narrowly overshoots -- 1.1% test error at 41.5% review -- which is reported
+as a miss, not rounded into a pass.
 
 The exact-match incumbent is on the table for scale. It never abstains, so it has
 no operating curve at all: one point, 54.2% error, and no way to trade.

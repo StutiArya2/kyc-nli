@@ -57,6 +57,34 @@ def test_bootstrap_is_deterministic(scored) -> None:
     assert (a.low, a.point, a.high) == (b.low, b.point, b.high)
 
 
+def test_the_interval_does_not_depend_on_the_order_instances_arrive_in(scored) -> None:
+    """Same data, same seed, any order -> the same interval.
+
+    The test above holds the order fixed, so it could not see this. The
+    resampler draws groups by position, and groups used to be built in arrival
+    order: a split evaluated straight from the generator (shuffled) and the same
+    split read back from disk (sorted by id) gave different intervals --
+    [0.566, 0.637] against [0.565, 0.640] for the rule engine. A confidence
+    interval that moves when a file is reordered is not reproducible.
+    """
+    import random
+
+    instances, rule_preds, exact_preds = scored
+    shuffled = list(instances)
+    random.Random(7).shuffle(shuffled)
+    reversed_ = list(reversed(instances))
+
+    base = bootstrap_macro_f1(instances, rule_preds, n_resamples=300, seed=11)
+    for order in (shuffled, reversed_):
+        again = bootstrap_macro_f1(order, rule_preds, n_resamples=300, seed=11)
+        assert (again.low, again.point, again.high) == (base.low, base.point, base.high)
+
+    # The paired test resamples the same way, so it must be order-invariant too.
+    a = paired_bootstrap(instances, rule_preds, exact_preds, "r", "e", n_resamples=300, seed=11)
+    b = paired_bootstrap(shuffled, rule_preds, exact_preds, "r", "e", n_resamples=300, seed=11)
+    assert (a.low, a.delta, a.high, a.p_value) == (b.low, b.delta, b.high, b.p_value)
+
+
 def test_group_resampling_gives_wider_intervals_than_instance_resampling(scored) -> None:
     """The justification for the whole design, made testable.
 

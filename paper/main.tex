@@ -1,0 +1,561 @@
+% ============================================================================
+%  KYC-NLI -- ACL-style paper draft
+%
+%  Compile on Overleaf: start from the official ACL template (it supplies
+%  acl.sty and acl_natbib.bst), then upload this file, references.bib, and the
+%  figures/ and tables/ folders. See paper/README.md.
+%
+%  Every number in a table is \input from tables/, written by
+%  scripts/make_tables.py from results/*.json. Every figure is written by
+%  scripts/make_figures.py. Numbers that appear in the PROSE are point estimates
+%  copied from those same files; if a result changes, regenerate the tables and
+%  figures and then search this file for the old value.
+%
+%  [review] anonymises the submission. Do not add author names, a repository
+%  URL, or an acknowledgements section until the camera-ready version.
+% ============================================================================
+
+\documentclass[11pt]{article}
+\usepackage[review]{acl}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xspace}
+
+\newcommand{\kyc}{\textsc{KYC-NLI}\xspace}
+\newcommand{\ent}{\textsc{Entailment}\xspace}
+\newcommand{\con}{\textsc{Contradiction}\xspace}
+\newcommand{\neu}{\textsc{Neutral}\xspace}
+
+\title{\kyc: Document-Level Inference for Cross-Script Identity Verification
+       under OCR Noise}
+
+\author{Anonymous submission}
+
+\begin{document}
+\maketitle
+
+% ----------------------------------------------------------------------------
+\begin{abstract}
+Identity verification asks whether a document supports a claim about its holder,
+and is usually implemented as string matching. On Indian identity documents the
+holder's name is printed twice---in a regional script and in Latin---and neither
+matching nor lookup survives contact with real data: romanisation is one-to-many
+(97.6\% of Urdu words have more than one human romanisation), and OCR
+\emph{deletes} characters far more often than it substitutes them. We recast
+verification as three-way document-level natural language inference in which
+\neu denotes that the document carries insufficient evidence, and is routed to a
+human. We introduce \kyc, a synthetic benchmark of 7,000 instances in
+minimal-pair contrast groups across five scripts, with OCR noise calibrated
+against a real engine rather than assumed. A transliteration-aware rule engine
+is at ceiling on clean input (0.991 macro-F1) but collapses under realistic
+noise (0.380); a cross-encoder trained only at moderate noise holds 0.911 on
+heavier noise it never saw. Holding the automation error rate fixed, the rule
+engine cannot meet a 5\% error budget at any threshold, while the cross-encoder
+meets it at its default operating point, deferring only the 28.6\% of cases that
+are undecidable by construction. The difference is calibration: the learned
+model's confidence ranks its own correctness, and the rule engine's does not.
+\end{abstract}
+
+% ----------------------------------------------------------------------------
+\section{Introduction}
+
+Know-your-customer (KYC) verification reduces to a sequence of questions of one
+form: \emph{does this document support this claim about its holder?} Production
+systems answer by comparing strings. That works on a clean scan of a document
+written in one script, and it fails in exactly the setting where verification is
+most needed.
+
+An Indian passport prints the holder's name twice: once in the Visual
+Inspection Zone (VIZ) in a regional script, and once in the Latin-only Machine
+Readable Zone (MRZ) mandated by ICAO Doc~9303~\citep{icao9303}. Two independent
+problems then arise. First, the mapping from native script to Latin is
+\emph{one-to-many}: there is no authority that fixes the spelling of a Hindi,
+Tamil or Bengali name, and the same holder may romanise their own name
+differently on different forms. Measured over human-written romanisations
+(\S\ref{sec:premises}), 57\% of Hindi words and 97.6\% of Urdu words have more
+than one accepted spelling. Second, the document is read by OCR, which---we
+find---mostly \emph{deletes} characters rather than substituting them. A
+substituted character leaves something to match against; a deleted one removes
+the evidence entirely.
+
+String matching handles neither, and a lookup table cannot handle the first even
+in principle, because there is no single correct answer to look up.
+Figure~\ref{fig:task} shows the consequence on the first Hindi identity in our
+held-out set: for the true claim that the holder's surname is
+\textsc{Chatterjee}, exact matching rejects a genuine customer, a strong
+transliteration-aware rule engine abstains and sends the case to a human, and a
+learned model decides it correctly.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig1_task}
+  \caption{The task on the first Hindi test identity (\texttt{hi-00000}; not
+  selected for its outcome). OCR has deleted characters from both zones: the
+  VIZ has lost the consonant under its vowel sign (the shaper marks the orphaned
+  sign with a dotted circle) and the MRZ reads \texttt{CHTTERJBF}. Neither
+  zone alone settles the claim; together they do. All three predictions are the
+  systems' actual outputs.}
+  \label{fig:task}
+\end{figure*}
+
+We argue that verification should be posed as \emph{natural language inference}
+over the whole document, with a three-way label. \ent and \con are decisions;
+\neu is not a low-confidence decision but a statement about the premise---the
+document does not contain the evidence needed to adjudicate the claim---and is
+the case a deployed system routes to human review. This framing makes the
+operational quantity of interest, the share of traffic a human must inspect,
+part of the task definition rather than an afterthought.
+
+Our contributions are:
+\begin{itemize}
+  \item \textbf{A task and benchmark.} \kyc frames identity verification as
+    document-level NLI over multi-zone, multi-script observations, with
+    \neu defined structurally as evidence insufficiency. Its 7,000 instances
+    come in minimal-pair contrast groups~\citep{gardner2020contrast} across
+    Latin, Devanagari, Tamil, Bengali and Perso-Arabic, with an identity-level
+    split that no held-out document shares with training.
+  \item \textbf{Measured, not assumed, noise.} We calibrate the OCR noise model
+    against Tesseract~\citep{smith2007tesseract} on correctly shaped renderings
+    of all five scripts. A hand-built model of the kind common in robustness
+    work had the error distribution backwards, and correcting it moved a strong
+    baseline from 0.831 to 0.597 macro-F1.
+  \item \textbf{A deliberately strong baseline.} A rule engine with the ICAO
+    transliteration tables, set-valued romanisation, MRZ check digits and
+    cross-field temporal rules is at ceiling on clean input, which locates the
+    contribution precisely: there is nothing to win on a clean scan.
+  \item \textbf{A selective-prediction evaluation.} Comparing systems at their
+    own operating points rewards abstention for free. Holding the automation
+    error fixed instead shows that only the learned model can be tuned to an
+    error budget at all, because only its confidence ranks correctness.
+\end{itemize}
+
+% ----------------------------------------------------------------------------
+\section{Related Work}
+
+\paragraph{Natural language inference.}
+Sentence-level NLI was popularised by large crowd-sourced corpora
+\citep{bowman2015snli,williams2018mnli}, and document-level variants extend the
+premise to long texts~\citep{yin2021docnli} and to contracts, where \neu likewise
+marks a clause the document does not address~\citep{koreeda2021contractnli}.
+Recent work incorporates implied content into the hypothesis
+space~\citep{havaldar2025entailed} and extends NLI across documents and
+languages~\citep{yuan2025cdcl}. Our premise is neither prose nor a single
+document view: it is a set of field observations from several zones of one
+document, in several scripts, each possibly corrupted.
+
+\paragraph{Artefacts and minimal pairs.}
+NLI models are known to exploit surface cues~\citep{gururangan2018annotation}
+and syntactic heuristics~\citep{mccoy2019right}. Contrast sets evaluate a
+model's local decision boundary with minimally edited
+instances~\citep{gardner2020contrast}. We build every instance inside such a
+group and score whole groups, so a system matching surface similarity rather
+than inferring is exposed directly.
+
+\paragraph{Transliteration and name matching.}
+Machine transliteration is surveyed by \citet{syauqi2025advances}. The Dakshina
+dataset~\citep{roark2020dakshina} supplies human-elicited romanisations for
+South Asian languages, which we use to measure rather than assume ambiguity.
+Fine-tuned language models have been applied to entity resolution in complex
+linguistic contexts~\citep{chourasia2026sger}; we differ in grounding the match
+in a document whose fields are themselves noisy.
+
+\paragraph{Identity documents and OCR.}
+Work on identity documents largely concerns classification and fraud:
+document-type classification~\citep{voerman2025optimizing}, presentation-attack
+detection~\citep{gonzalez2025forged} and forged-document
+detection~\citep{munozharo2025fakeidet2}, with named-entity extraction for
+document verification studied by \citet{toprak2023enhanced}. MIDV-2020
+\citep{bulatov2022midv2020} is the standard image benchmark, but contains no
+Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four
+of our five languages. LLM robustness to multilingual OCR noise has been
+evaluated for question answering~\citep{piryani2025multiocrqa}.
+
+\paragraph{Selective prediction.}
+A classifier that may abstain is compared on a risk--coverage
+curve~\citep{elyaniv2010foundations,geifman2017selective}. Validation pipelines
+that defer uncertain cases to a person~\citep{tsaneva2025knowledge} face the same
+trade-off. We report the deployment form of that curve: the review load needed
+to meet a fixed error budget.
+
+% ----------------------------------------------------------------------------
+\section{The \kyc Task}
+\label{sec:task}
+
+\paragraph{Formulation.}
+An instance is a triple $(P, h, y)$. The premise $P$ is the set of field
+observations read from one document; each observation records a field (surname,
+date of birth, \dots), the zone it was read from (VIZ or MRZ), the script, the
+observed value \emph{after} OCR, and the OCR engine's confidence. The hypothesis
+$h$ asserts one value for one field (``The holder's surname is
+\textsc{Chatterjee}''). The label $y \in \{\ent, \con, \neu\}$.
+
+\paragraph{\neu as evidence insufficiency.}
+\neu holds when the document does not carry the evidence to settle $h$: the
+field is absent from this document type, or every observation of it is
+illegible. It is a property of the premise, not of a model's confidence, and
+deployment maps it to human review. A system that treats \neu as ``low
+confidence'' conflates two different reasons to defer.
+
+\paragraph{Languages.}
+We cover the five scripts of the Indian document context. English is the
+control: every Indian document carries a Latin zone. Hindi, Tamil and Bengali
+have no normative romanisation; Tamil does not mark voicing at all, so one
+letter is read \textit{k} or \textit{g} by position. Urdu is written without
+short vowels, so a consonant skeleton maps to several names, and it is the only
+language with partial normative backing (the ICAO Arabic table).
+
+% ----------------------------------------------------------------------------
+\section{Building the Benchmark}
+\label{sec:benchmark}
+
+\paragraph{Documents.}
+For each language we fabricate identities from pools of
+\emph{(native, attested Latin)} name pairs---the Latin form is attested, never
+derived from our own transliterator---and issue each a TD3 passport. The MRZ is
+built to ICAO Doc~9303 with real 7-3-1 check digits, validated character for
+character against the standard's specimen. No byte derives from a real person.
+
+\paragraph{Contrast groups.}
+Each identity yields three groups that share one document and differ only in
+the hypothesis: a \emph{cross-script name} group (an accepted alternative or the
+ICAO romanisation, \ent; a different person's name chosen to be close in Latin
+form, \con; a field the document does not carry, \neu), a \emph{temporal} group
+(consistent dates; an impossible combination of issue, expiry and template era;
+a date off by one day), and an \emph{evidence} group (an illegible field; an
+absent field). Each instance is tagged with the phenomenon it probes.
+
+\paragraph{Identity-level splitting.}
+Because one identity produces several groups that share a surname, dates and a
+document number, splitting by group leaks documents across the split. We split
+by identity, stratified by language, and assert zero overlap. Table~\ref{tab:data}
+gives the result.
+
+\begin{table}[t]
+  \centering
+  \resizebox{\columnwidth}{!}{\input{tables/tab_data}}
+  \caption{\kyc. 200 identities per language across five languages; every
+  identity yields three contrast groups. No identity, group or document number
+  appears in more than one split.}
+  \label{tab:data}
+\end{table}
+
+% ----------------------------------------------------------------------------
+\section{Measuring the Two Premises}
+\label{sec:premises}
+
+The argument rests on two empirical claims. We measure both
+(Figure~\ref{fig:motivation}).
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig2_motivation}
+  \caption{(a) Share of words with more than one human romanisation in Dakshina,
+  with mean romanisations per word, over roughly 30,000 words per language.
+  (b) Ratio of deletion to substitution rate. The hand-built noise model
+  (grey) made substitution dominant; measured Tesseract output (violet) is the
+  reverse at every level. Note the log scale.}
+  \label{fig:motivation}
+\end{figure*}
+
+\paragraph{Romanisation is one-to-many.}
+Over the Dakshina lexicons~\citep{roark2020dakshina}, the share of native words
+with more than one human romanisation rises from 57.0\% in Hindi through 74.6\%
+in Tamil and 90.2\% in Bengali to 97.6\% in Urdu, averaging 4.2 spellings per
+Urdu word. The ordering was predicted from the scripts' properties before the
+data was consulted. Dakshina also exposed the optimism of hand-written test
+pairs: recall of our Urdu transliterator fell from 98\% on 40 pairs we had
+written ourselves to 29.5\% on independent romanisations, and because Dakshina's
+splits are word-disjoint, an attested-spelling lexicon gives no benefit on
+unseen words.
+
+\paragraph{OCR mostly deletes.}
+MIDV-2020 cannot calibrate Indic or Perso-Arabic scripts, so we render known
+text with HarfBuzz shaping and FreeType rasterisation, degrade it through five
+capture conditions, read it with Tesseract~\citep{smith2007tesseract}, and align
+the output to the input with a Levenshtein backtrace. Deletion exceeds
+substitution at every level, by a factor of 1.3 to 3.6. A hand-built model of
+the kind used in robustness studies had this backwards, with deletion rates 5
+to 17 times too low. The distinction is not cosmetic: re-running the noise
+ablation with the measured model moved the rule engine at moderate noise from
+0.831 to 0.597 macro-F1. Rendered text has no paper grain, glare or perspective,
+so these rates are a lower bound on real capture.
+
+% ----------------------------------------------------------------------------
+\section{Systems}
+\label{sec:systems}
+
+All three systems share one interface and are scored by one harness.
+
+\paragraph{Exact match.}
+Compares the claimed value with every observation of the field after case and
+whitespace normalisation. It has no notion of \neu and never abstains---the
+honest behaviour of the incumbent, and the source of its false-mismatch rate.
+
+\paragraph{Rule engine.}
+Built to win. It receives the ICAO tables, set-valued romanisation engines for
+every script (an abugida traversal with script-specific alternations for the
+Brahmic scripts; vowel readings of the Perso-Arabic \emph{matres lectionis} for
+Urdu), MRZ check digits, multi-format date parsing and cross-field temporal
+rules. A field is illegible below an OCR confidence of 0.35. Names match on the
+best fuzzy similarity over every variant of every zone: at or above 88 is \ent,
+at or below 60 is \con, and the band between is \neu. That band is the rule
+engine's own version of conflating uncertainty with evidence absence, and we
+retain it because removing it would weaken the baseline.
+
+\paragraph{Cross-encoder.}
+We fine-tune \texttt{distilbert-base-multilingual-cased}
+\citep{sanh2019distilbert,devlin2019bert} as a three-way classifier over a
+serialised premise and the hypothesis. Each observation is rendered as
+\texttt{field:zone=value}, with values below the shared 0.35 threshold replaced
+by an explicit unreadable marker; compressing the serialisation took the median
+length from 347 to 159 subword tokens. The model never sees the pre-corruption
+value, nor the transliteration variant sets---the rule engine's central
+advantage---so any win over that baseline is a win on inference. With the
+embedding table frozen (92M of 135M parameters), two epochs train in 136 minutes
+on a four-thread CPU. The model is trained at moderate noise only.
+
+% ----------------------------------------------------------------------------
+\section{Evaluation Protocol}
+\label{sec:protocol}
+
+We report four levels, all mandatory: macro-F1 with per-class F1; per-language
+macro-F1; per-phenomenon accuracy; and \emph{contrast-group consistency}, the
+share of groups whose every member is correct, which a surface-matching system
+cannot fake. Deployment rates follow: the false-mismatch rate (genuine holders
+rejected) and the review load (share routed to a human).
+
+Every macro-F1 carries a 95\% bootstrap interval~\citep{efron1993bootstrap} with
+1,000 resamples drawn over \emph{contrast groups}, not instances: members of a
+group share a premise, and treating them as independent narrows the interval by
+about 7\%. Claims that one system beats another rest on a paired
+bootstrap~\citep{koehn2004significance}.
+
+\paragraph{Selective prediction.}
+Systems abstain at different rates, and macro-F1 charges nothing for the human
+labour abstention costs. We therefore also fix the automation error rate and
+report the review load required to meet it. A \neu prediction counts as sent to
+a human---never as an error, never as coverage---and a system that cannot meet a
+budget at any threshold is reported as \emph{unreachable}, not as 100\% review.
+The confidence threshold for each budget is chosen on the development split by
+exact search over every achievable cut point, then applied unchanged to the test
+split, and we report the test error it actually produces even when that exceeds
+the budget. Thresholds tuned on the test split itself are used only for claims of
+impossibility, for which they are the most generous setting available.
+
+% ----------------------------------------------------------------------------
+\section{Results}
+\label{sec:results}
+
+\begin{table*}[t]
+  \centering
+  \input{tables/tab_main}
+  \caption{Held-out results at moderate noise (1,050 instances, 150 identities
+  never seen in training). \emph{Review @ 5\% err.}: share of traffic sent to a
+  human when the threshold for a 5\% error budget is chosen on development data
+  and applied to test, with the test error it produced in parentheses;
+  $^{\ddagger}$ marks a test error above the budget, and ``--'' a system that
+  never abstains. Best value per column in bold.}
+  \label{tab:main}
+\end{table*}
+
+\paragraph{Main result.}
+Table~\ref{tab:main} reports the held-out split at the noise level the model was
+trained on. The cross-encoder reaches 0.972 macro-F1 against the rule engine's
+0.601, and the paired bootstrap difference excludes zero. It also wins on the
+metrics macro-F1 does not capture: contrast-group consistency rises from 0.307
+to 0.936, genuine holders rejected fall from 9.3\% to 5.7\%, and review load
+falls from 63.4\% to 28.6\%.
+
+That last figure needs reading correctly. 28.6\% is exactly the share of \neu
+instances in the split: the minimum review load any correct system can have. The
+cross-encoder sits at that floor; the rule engine sends a further 35 percentage
+points of \emph{decidable} cases to a human, abstaining on 48.8\% of cases the
+document actually settles.
+
+\paragraph{Robustness to capture quality.}
+Because the generator's identity sampling is independent of the noise preset, we
+can regenerate the identical 1,050 held-out instances---same identities, same
+gold labels, same document numbers---at every noise level, varying only the OCR
+damage (Table~\ref{tab:noise}, Figure~\ref{fig:noise}). On clean input the rule
+engine is at ceiling (0.991) and statistically indistinguishable from the
+cross-encoder (0.986): there is nothing to win on a clean scan. Under noise the
+two diverge sharply. The rule engine falls to 0.928, 0.601 and 0.380; the
+cross-encoder falls to 0.984, 0.972 and 0.911, holding up on heavy noise it was
+never trained on. Its review load stays at the 28.6\% floor through moderate
+noise and reaches 32.3\% at heavy, against the rule engine's 81.6\%.
+
+\begin{table*}[t]
+  \centering
+  \input{tables/tab_noise}
+  \caption{Macro-F1 [95\% CI] on the same 1,050 held-out instances at every OCR
+  noise level; only the corruption varies. $^{*}$The cross-encoder was trained
+  at moderate noise only. $\Delta$: paired-bootstrap difference, cross-encoder
+  minus rule engine; $^{\dagger}$ marks a difference whose interval includes zero.}
+  \label{tab:noise}
+\end{table*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/fig3_noise}
+  \caption{Macro-F1 as capture quality degrades, on identical documents. Shaded
+  bands are 95\% bootstrap intervals over contrast groups.}
+  \label{fig:noise}
+\end{figure}
+
+\paragraph{The cost of an error budget.}
+Figure~\ref{fig:selective}a plots review load against the error rate on the
+cases each system decides alone. The rule engine already sends 63.4\% of traffic
+to a human and is still wrong on 11.2\% of what it decides. With thresholds
+chosen on development data it misses every budget on test: its 10\% setting
+yields 11.2\% error, and its 5\% setting yields 5.2\% error while sending 92.7\%
+of traffic to a human. Even a threshold tuned on the test split itself cannot
+reach 5\%: an exhaustive sweep over all 37 of its distinct confidence values
+bottoms out at 5.19\%. The cross-encoder meets the 10\% and 5\% budgets at its
+default operating point (4.0\% error), meets a 2\% budget at 35.5\% review
+(1.8\% test error), and at a 1\% budget reviews 41.5\% of traffic for a test
+error of 1.1\%, narrowly over budget.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig4_selective}
+  \caption{Selective prediction at moderate noise. (a) Review load against error
+  on the decisions made without a human, as the confidence threshold rises;
+  large markers are each system's default operating point. Exact match never
+  abstains and sits far off this axis. (b) Risk--coverage: error among the
+  most-confident fraction. Ties in confidence are averaged over orderings within
+  the tie, so a system with uninformative confidence draws a flat line.}
+  \label{fig:selective}
+\end{figure*}
+
+\paragraph{Why the rule engine cannot be tuned.}
+Figure~\ref{fig:selective}b explains the gap. The cross-encoder's risk--coverage
+curve is monotone and flat at zero error through 65\% coverage: its confidence
+ranks correctness, so a threshold is a usable control. The rule engine's curve
+is not monotone. Its confidences are constants attached to rules---0.99 for a
+check-digit match, 0.85 for a literal mismatch, 0.5 for the indeterminate
+band---so they record \emph{which rule fired}, not \emph{how likely that rule is
+to be right}, and sorting by them sorts by rule. Exact match, which reports 1.0
+everywhere, is flat at its overall error rate.
+
+\paragraph{Where the errors are.}
+Figure~\ref{fig:phenomena} breaks accuracy down by phenomenon. Every
+cross-encoder error falls on the three cross-script name phenomena, hardest on
+accepted alternative romanisations (0.839); all five structural phenomena are
+perfect. A model that had learned only the temporal rules would show the
+opposite pattern. The rule engine is perfect where the task is trivial---noticing
+a missing or illegible field---and fails where its rules depend on reading
+values that OCR has damaged: its temporal rules are correct, but once a date
+such as \texttt{27~MAY~2028} reads \texttt{27~MY~20Z8} there is no date left to
+reason about. By language (Table~\ref{tab:language}), Urdu is the weakest for
+both systems, consistent with it being both the most one-to-many script and the
+one Tesseract reads worst.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig5_phenomena}
+  \caption{Accuracy by phenomenon on held-out instances at moderate noise.
+  Labels give the cross-encoder's accuracy wherever it is below 1.}
+  \label{fig:phenomena}
+\end{figure*}
+
+\begin{table}[t]
+  \centering
+  \resizebox{\columnwidth}{!}{\input{tables/tab_language}}
+  \caption{Macro-F1 by language at moderate noise.}
+  \label{tab:language}
+\end{table}
+
+% ----------------------------------------------------------------------------
+\section{Analysis}
+\label{sec:analysis}
+
+\paragraph{A leak that looked like a strong model.}
+An earlier version of the split partitioned by contrast group. One identity
+yields three groups sharing a surname, dates and a document number, so 359 of
+383 test identities (94\%) also appeared in training, and the cross-encoder
+scored 0.989. Every number from that run is discarded. The tell, in hindsight,
+was \neu F1 of exactly 1.000 alongside uniformly high scores; the corrected split
+lowers the headline to 0.972. We report this because the failure is general:
+any generator that derives several instances from one latent entity leaks
+through a split on anything finer than that entity.
+
+\paragraph{\neu F1 of 1.000 is a property of the benchmark.}
+The cross-encoder's \neu F1 is perfect, and so is the rule engine's on both
+\neu phenomena. \neu instances are built by removing or destroying evidence,
+which leaves a visible trace in the premise; detecting it is a surface pattern.
+This confirms the generator implements the label definition, and nothing more.
+A \neu class requiring genuine judgement needs human annotation.
+
+\paragraph{The model generalises to heavier noise.}
+Trained at moderate noise, the cross-encoder loses 0.075 macro-F1 between clean
+and heavy noise, while the rule engine loses 0.610. The learned model has not
+memorised a noise level; it has learned to recover a field from whichever zone
+survived.
+
+% ----------------------------------------------------------------------------
+\section{Conclusion}
+
+Posing identity verification as document-level inference with a structural
+\neu turns review load into part of the task. On a benchmark built from measured
+romanisation ambiguity and measured OCR noise, a strong rule engine is at
+ceiling on clean input and collapses under realistic corruption, while a small
+cross-encoder trained at one noise level holds up across all of them. The
+decisive difference is not accuracy but calibration: only the learned model's
+confidence ranks its own correctness, so only it can be operated at a fixed
+error budget.
+
+% ----------------------------------------------------------------------------
+\section*{Limitations}
+
+\textbf{Synthetic documents.} No real identity document is used, by design:
+collecting them is not lawful. Romanisations and OCR rates are drawn from real
+data, but the documents, names and dates are generated, and generated documents
+are more regular than real ones.
+
+\textbf{No human labels.} Gold labels follow from the generator's construction.
+No annotator has labelled an instance, and no inter-annotator agreement is
+reported. This is the most important limit on every number in this paper.
+
+\textbf{Rendered, not photographed.} OCR rates are measured on rendered text
+with simulated degradation; real captures add paper texture, glare, perspective
+and wear. The rates are a lower bound, and only one OCR engine was measured.
+
+\textbf{Urdu typography.} Urdu was rendered in a Naskh face, while Urdu
+documents are commonly printed in Nastaliq, which OCR handles worse. Our Urdu
+results are likely optimistic.
+
+\textbf{Scale of the model.} The cross-encoder is a distilled multilingual model
+trained on CPU with frozen embeddings, from a single seed. It is a floor, not a
+ceiling; we report no variance across training runs.
+
+\textbf{Point estimates on the selective curves.} Macro-F1 carries bootstrap
+intervals; the operating points in Figure~\ref{fig:selective} do not.
+
+\textbf{Structural \neu.} Because \neu is generated by removing evidence, the
+benchmark does not test \neu cases that require judgement.
+
+% ----------------------------------------------------------------------------
+\section*{Ethics Statement}
+
+The benchmark contains no personal data: every identity is fabricated, and
+provenance records assert this for every instance. Automated identity
+verification decides who can open a bank account, so its errors fall on people.
+Exact matching rejects 89.3\% of genuine holders in our setting, and those
+rejections are not evenly distributed: they concentrate on names whose
+romanisation is most ambiguous. Both systems we study are weakest on Urdu, which
+means holders with Urdu names would bear a disproportionate share of errors and
+reviews. A deployed system should report error and review rates per script, and
+its \neu cases must reach a human rather than default to rejection.
+
+\bibliography{references}
+
+\end{document}

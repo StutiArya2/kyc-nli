@@ -128,7 +128,7 @@ claim stands on the evidence that was specified in advance to falsify it.
 | # | Milestone | Output | Depends on |
 | --- | --- | --- | --- |
 | M0 | Repo, schema, generator, rule baseline, eval harness | ✅ this commit | — |
-| M1 | ✅ Noise-model calibration DONE. **Not on MIDV-2020** — it contains no Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four of five languages ([decision 0006](decisions/0006-ocr-calibration.md)). Render-based instead: HarfBuzz shaping + Tesseract + alignment. The hand-built model had deletion 10-17x too low; measured rates now live in `kyc_nli.ocr.measured`. | `docs/m1-ocr-calibration-findings.md` | — |
+| M1 | ✅ Noise-model calibration DONE. **Not on MIDV-2020** — it contains no Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four of five languages ([decision 0006](decisions/0006-ocr-calibration.md)). Render-based instead: HarfBuzz shaping + Tesseract + alignment. The hand-built model had deletion 5-17x too low; measured rates now live in `kyc_nli.ocr.measured`. | `docs/m1-ocr-calibration-findings.md` | — |
 | M1b | Urdu in Nastaliq rather than Naskh, and a second OCR engine, to separate font and engine limits from script difficulty | corrected Urdu rates | M1 |
 | M2 | ✅ Dakshina integrated. Used to *measure* the engines rather than to replace the pools — it is general vocabulary, not names. Premise quantified; two engine bugs fixed. | `docs/m2-dakshina-findings.md`, `kyc-nli translit-eval` | — |
 | M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |

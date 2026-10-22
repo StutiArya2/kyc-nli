@@ -22,6 +22,7 @@ from kyc_nli.data.io import load_instances, save_instances, split_by_identity, w
 from kyc_nli.evaluation import (
     DEFAULT_RESAMPLES,
     evaluate,
+    operating_point_at,
     paired_bootstrap,
     review_load_at_error,
     risk_coverage,
@@ -106,7 +107,9 @@ def generate(
 @app.command()
 def inspect(
     dataset: Path = typer.Argument(Path("data/processed/synth_v0.jsonl")),
-    n: int = typer.Option(3, help="Instances to show."),
+    # Both spellings: typer derives `--n` from the parameter name, but everyone
+    # reaching for a count types `-n`, and three places in our own docs did.
+    n: int = typer.Option(3, "-n", "--n", help="Instances to show."),
     language: str = typer.Option("", help="Filter to one language code."),
     phenomenon: str = typer.Option("", help="Filter to one phenomenon."),
 ) -> None:
@@ -236,11 +239,15 @@ def compare(
 @app.command("risk-coverage")
 def risk_coverage_cmd(
     dataset: Path = typer.Option(Path("data/processed/synth_v0.test.jsonl")),
+    dev_dataset: Path = typer.Option(
+        Path("data/processed/synth_v0.dev.jsonl"),
+        help="Where thresholds are CHOSEN. Never the split they are reported on.",
+    ),
     out: Path = typer.Option(Path("results/selective-prediction.json")),
     budgets: str = typer.Option(
         "0.10,0.05,0.02,0.01", help="Comma-separated automation error budgets."
     ),
-    steps: int = typer.Option(20, help="Points on the curve."),
+    steps: int = typer.Option(20, help="Points on the plotted curves."),
 ) -> None:
     """Milestone M4: the selective-prediction view of every available system.
 
@@ -250,10 +257,23 @@ def risk_coverage_cmd(
     asks what each system costs to run there, which is the question a compliance
     function actually poses.
 
-    A system that cannot reach a budget at any threshold is reported as such,
-    rather than as "100% review" -- declining to answer is not meeting a target.
+    Two answers per budget, because they license different claims:
+
+      oracle     the threshold chosen ON THE TEST SPLIT, by exact search. The
+                 best a system could possibly do. Use it only for impossibility:
+                 "unreachable even when tuned on the test set".
+      dev-tuned  the threshold chosen on DEV, then applied to test. Use it for any
+                 claim that a system MEETS a budget. Its test error can exceed
+                 the budget; that is the measurement.
+
+    A system that cannot reach a budget is reported as such, never as "100%
+    review" -- declining to answer is not meeting a target.
     """
     instances = load_instances(_resolve(dataset))
+    dev_path = _resolve(dev_dataset)
+    dev = load_instances(dev_path) if dev_path.exists() else None
+    if dev is None:
+        console.print(f"[yellow]No dev split at {dev_path}; reporting oracle points only.[/yellow]")
     targets = [float(b) for b in budgets.split(",") if b.strip()]
 
     table = Table(title=f"Review load at a fixed automation error ({dataset.name})")
@@ -264,19 +284,39 @@ def risk_coverage_cmd(
 
     payload: dict[str, dict] = {}
     for name, cls in available_systems().items():
-        preds = _predict_all(cls(), instances)
+        model = cls()
+        preds = _predict_all(model, instances)
+        dev_preds = _predict_all(model, dev) if dev is not None else None
         curve = selective_curve(instances, preds, steps=steps)
         own = curve[0]
         row = [name, f"{own.review_load:.1%} @ {own.error_on_auto:.1%}"]
-        budget_rows = {}
+        oracle_rows, tuned_rows = {}, {}
         for b in targets:
-            point = review_load_at_error(instances, preds, max_error=b)
-            row.append("unreachable" if point is None else f"{point.review_load:.1%}")
-            budget_rows[f"{b}"] = point.as_row() if point else None
+            oracle = review_load_at_error(instances, preds, max_error=b)
+            oracle_rows[f"{b}"] = oracle.as_row() if oracle else None
+            tuned = None
+            if dev is not None and dev_preds is not None:
+                chosen = review_load_at_error(dev, dev_preds, max_error=b)
+                if chosen is not None:
+                    applied = operating_point_at(instances, preds, chosen.threshold)
+                    tuned = {"dev": chosen.as_row(), "test": applied.as_row()}
+            tuned_rows[f"{b}"] = tuned
+            # The table shows the claim-bearing number: dev-tuned where a dev
+            # split exists, with the error it actually achieved on test.
+            if dev is not None:
+                if tuned is None:
+                    cell = "unreachable"
+                else:
+                    t = tuned["test"]
+                    cell = f"{t['review_load']:.1%} ({t['error_on_auto']:.1%})"
+            else:
+                cell = "unreachable" if oracle is None else f"{oracle.review_load:.1%}"
+            row.append(cell)
         table.add_row(*row)
         payload[name] = {
             "own_operating_point": own.as_row(),
-            "review_load_at_error": budget_rows,
+            "review_load_at_error": oracle_rows,
+            "dev_tuned": tuned_rows,
             "selective_curve": [p.as_row() for p in curve],
             "risk_coverage": [
                 {"coverage": c, "risk": r} for c, r in risk_coverage(instances, preds, steps=steps)
@@ -284,10 +324,34 @@ def risk_coverage_cmd(
         }
 
     console.print(table)
+    if dev is not None:
+        console.print(
+            "[dim]Cells: test review load (test error) with the threshold chosen on dev.[/dim]"
+        )
     out_path = _resolve(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     console.print(f"\n[green]Curves written to[/green] {out_path}")
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8765, help="Port on localhost."),
+    host: str = typer.Option(
+        "127.0.0.1", help="Interface to bind. Keep the default unless you mean to expose it."
+    ),
+    browser: bool = typer.Option(True, help="Open the interface in a browser."),
+) -> None:
+    """Open the interactive explorer in a browser.
+
+    Browse the benchmark, step one document from clean to heavy OCR noise, edit
+    a claim, and watch all three systems decide live. Uses the noise-robustness
+    splits (`python scripts/noise_robustness.py`) and the trained cross-encoder
+    when present, and degrades to whatever exists when they are not.
+    """
+    from kyc_nli.app.server import serve as run
+
+    run(host=host, port=port, open_browser=browser)
 
 
 @app.command("fetch-dakshina")
