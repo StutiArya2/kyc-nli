@@ -51,6 +51,13 @@ ocr = [
     "uharfbuzz>=0.39",
     "freetype-py>=2.4",
 ]
+# Paper figures (milestone M7). Optional because nothing in the pipeline needs
+# it: figures are rendered from results/*.json after the fact, never during a run.
+#   pip install -e ".[paper]"
+#   python scripts/make_figures.py
+paper = [
+    "matplotlib>=3.8",
+]
 # Optional higher-fidelity transliteration backends.
 translit = [
     "pypinyin>=0.51",
@@ -70,6 +77,13 @@ kyc-nli = "kyc_nli.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# PEP 561 marker. Without it mypy refuses to check an installed package at
+# all -- `mypy` exited on "missing py.typed marker", so the command CLAUDE.md
+# advertises was checking nothing.
+[tool.setuptools.package-data]
+# The web interface ships its one HTML file inside the package.
+kyc_nli = ["py.typed", "app/static/*.html"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
@@ -87,9 +101,18 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# `slow` is the fine-tuning smoke test: it really trains a transformer for a
+# few steps and writes a checkpoint, which is the only way to exercise that
+# path at all, and takes about a minute. Excluded by default so the suite
+# stays fast enough to run on every change; run it with `-m slow`.
+markers = ["slow: takes tens of seconds; deselected by default"]
+addopts = "-q -m 'not slow'"
 
 [tool.mypy]
-python_version = "3.10"
+# Not 3.10, despite requires-python: the installed numpy stubs use `type X =`
+# syntax, which mypy refuses to parse under an older target and which aborts
+# the whole run on the first file. Source compatibility with 3.10 is a
+# packaging promise checked by the classifiers, not by this.
+python_version = "3.12"
 packages = ["kyc_nli"]
 ignore_missing_imports = true

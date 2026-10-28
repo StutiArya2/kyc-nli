@@ -25,7 +25,15 @@ from kyc_nli.baselines import available_systems
 from kyc_nli.data import corpora
 from kyc_nli.data.generate import GeneratorConfig, InstanceGenerator
 from kyc_nli.data.io import load_instances, save_instances, split_by_identity, write_manifest
-from kyc_nli.evaluation import DEFAULT_RESAMPLES, evaluate, paired_bootstrap
+from kyc_nli.evaluation import (
+    DEFAULT_RESAMPLES,
+    evaluate,
+    operating_point_at,
+    paired_bootstrap,
+    review_load_at_error,
+    risk_coverage,
+    selective_curve,
+)
 from kyc_nli.evaluation.transliteration import HEADER, evaluate_transliteration
 from kyc_nli.languages import load_languages, repo_root
 from kyc_nli.schema import Label
@@ -58,7 +66,7 @@ def languages() -> None:
 @app.command()
 def generate(
     out: Path = typer.Option(
-        Path("data/processed/synth_v0.jsonl"), help="Output JSONL path (gitignored)."
+        Path("data/processed/synth_v1.jsonl"), help="Output JSONL path (gitignored)."
     ),
     identities: int = typer.Option(200, help="Fabricated identities per language."),
     noise: str = typer.Option("moderate", help="clean | light | moderate | heavy"),
@@ -66,6 +74,14 @@ def generate(
     split: bool = typer.Option(True, help="Also write train/dev/test splits."),
 ) -> None:
     """Generate the synthetic benchmark. No real identity data is involved."""
+    out = _resolve(out)
+    targets = [out, out.with_suffix(".manifest.json")]
+    if split:
+        targets += [out.with_name(f"{out.stem}.{name}.jsonl") for name in ("train", "dev", "test")]
+    if any(path.exists() for path in targets):
+        raise FileExistsError("Refusing to overwrite an existing dataset or manifest")
+    if out.name.startswith("synth_v0"):
+        raise ValueError("Corrected generation must use a new v1 output path")
     config = GeneratorConfig(
         languages=tuple(load_languages()),
         identities_per_language=identities,
@@ -87,6 +103,7 @@ def generate(
             "noise_preset": config.noise_preset,
             "seed": config.seed,
             "alt_romanisation_rate": config.alt_romanisation_rate,
+            "dataset_version": config.dataset_version,
         },
     )
 
@@ -103,7 +120,9 @@ def generate(
 @app.command()
 def inspect(
     dataset: Path = typer.Argument(Path("data/processed/synth_v0.jsonl")),
-    n: int = typer.Option(3, help="Instances to show."),
+    # Both spellings: typer derives `--n` from the parameter name, but everyone
+    # reaching for a count types `-n`, and three places in our own docs did.
+    n: int = typer.Option(3, "-n", "--n", help="Instances to show."),
     language: str = typer.Option("", help="Filter to one language code."),
     phenomenon: str = typer.Option("", help="Filter to one phenomenon."),
 ) -> None:
@@ -115,7 +134,10 @@ def inspect(
         instances = [i for i in instances if i.phenomenon == phenomenon]
 
     for inst in instances[:n]:
-        console.rule(f"{inst.id}  [{inst.language}]  {inst.phenomenon}")
+        # The brackets are escaped: rich reads "[ta]" as a markup tag and the
+        # language code -- the one thing you filter on -- disappears from the
+        # output entirely.
+        console.rule(rf"{inst.id}  \[{inst.language}]  {inst.phenomenon}")
         table = Table(show_header=True)
         table.add_column("zone")
         table.add_column("field")
@@ -225,6 +247,124 @@ def compare(
                 )
                 colour = "green" if cmp.significant else "yellow"
                 console.print(f"  [{colour}]{cmp}[/{colour}]")
+
+
+@app.command("risk-coverage")
+def risk_coverage_cmd(
+    dataset: Path = typer.Option(Path("data/processed/synth_v0.test.jsonl")),
+    dev_dataset: Path = typer.Option(
+        Path("data/processed/synth_v0.dev.jsonl"),
+        help="Where thresholds are CHOSEN. Never the split they are reported on.",
+    ),
+    out: Path = typer.Option(Path("results/selective-prediction.json")),
+    budgets: str = typer.Option(
+        "0.10,0.05,0.02,0.01", help="Comma-separated automation error budgets."
+    ),
+    steps: int = typer.Option(20, help="Points on the plotted curves."),
+) -> None:
+    """Milestone M4: the selective-prediction view of every available system.
+
+    The headline table reports each system at its own operating point, which is
+    not a like-for-like comparison: a system that abstains more buys a lower
+    error rate with human labour. This command fixes the error rate instead and
+    asks what each system costs to run there, which is the question a compliance
+    function actually poses.
+
+    Two answers per budget, because they license different claims:
+
+      oracle     the threshold chosen ON THE TEST SPLIT, by exact search. The
+                 best a system could possibly do. Use it only for impossibility:
+                 "unreachable even when tuned on the test set".
+      dev-tuned  the threshold chosen on DEV, then applied to test. Use it for any
+                 claim that a system MEETS a budget. Its test error can exceed
+                 the budget; that is the measurement.
+
+    A system that cannot reach a budget is reported as such, never as "100%
+    review" -- declining to answer is not meeting a target.
+    """
+    instances = load_instances(_resolve(dataset))
+    dev_path = _resolve(dev_dataset)
+    dev = load_instances(dev_path) if dev_path.exists() else None
+    if dev is None:
+        console.print(f"[yellow]No dev split at {dev_path}; reporting oracle points only.[/yellow]")
+    targets = [float(b) for b in budgets.split(",") if b.strip()]
+
+    table = Table(title=f"Review load at a fixed automation error ({dataset.name})")
+    table.add_column("system")
+    table.add_column("own point", justify="right")
+    for b in targets:
+        table.add_column(f"err <= {b:.0%}", justify="right")
+
+    payload: dict[str, dict] = {}
+    for name, cls in available_systems().items():
+        model = cls()
+        preds = _predict_all(model, instances)
+        dev_preds = _predict_all(model, dev) if dev is not None else None
+        curve = selective_curve(instances, preds, steps=steps)
+        own = curve[0]
+        row = [name, f"{own.review_load:.1%} @ {own.error_on_auto:.1%}"]
+        oracle_rows, tuned_rows = {}, {}
+        for b in targets:
+            oracle = review_load_at_error(instances, preds, max_error=b)
+            oracle_rows[f"{b}"] = oracle.as_row() if oracle else None
+            tuned = None
+            if dev is not None and dev_preds is not None:
+                chosen = review_load_at_error(dev, dev_preds, max_error=b)
+                if chosen is not None:
+                    applied = operating_point_at(instances, preds, chosen.threshold)
+                    tuned = {"dev": chosen.as_row(), "test": applied.as_row()}
+            tuned_rows[f"{b}"] = tuned
+            # The table shows the claim-bearing number: dev-tuned where a dev
+            # split exists, with the error it actually achieved on test.
+            if dev is not None:
+                if tuned is None:
+                    cell = "unreachable"
+                else:
+                    t = tuned["test"]
+                    cell = f"{t['review_load']:.1%} ({t['error_on_auto']:.1%})"
+            else:
+                cell = "unreachable" if oracle is None else f"{oracle.review_load:.1%}"
+            row.append(cell)
+        table.add_row(*row)
+        payload[name] = {
+            "own_operating_point": own.as_row(),
+            "review_load_at_error": oracle_rows,
+            "dev_tuned": tuned_rows,
+            "selective_curve": [p.as_row() for p in curve],
+            "risk_coverage": [
+                {"coverage": c, "risk": r} for c, r in risk_coverage(instances, preds, steps=steps)
+            ],
+        }
+
+    console.print(table)
+    if dev is not None:
+        console.print(
+            "[dim]Cells: test review load (test error) with the threshold chosen on dev.[/dim]"
+        )
+    out_path = _resolve(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    console.print(f"\n[green]Curves written to[/green] {out_path}")
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8765, help="Port on localhost."),
+    host: str = typer.Option(
+        "127.0.0.1", help="Interface to bind. Keep the default unless you mean to expose it."
+    ),
+    browser: bool = typer.Option(True, help="Open the interface in a browser."),
+) -> None:
+    """Open the interactive explorer in a browser.
+
+    Browse the benchmark, step one document from clean to heavy OCR noise, edit
+    a claim, and watch all three systems decide live. Uses the noise-robustness
+    splits (`python scripts/noise_robustness.py`) and the trained cross-encoder
+    when present, and degrades to whatever exists when they are not.
+    """
+    from kyc_nli.app.server import serve as run
+
+    run(host=host, port=port, open_browser=browser)
 
 
 @app.command("fetch-dakshina")
@@ -460,6 +600,105 @@ def demo(
         only=step,
         sample=sample,
     )
+
+
+@app.command("freeze-v1")
+def freeze_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_freeze.yaml")),
+) -> None:
+    """Freeze corrected negatives with unchanged identity/OCR streams and split IDs."""
+    from kyc_nli.v1 import freeze
+
+    console.print(f"Frozen manifest: {freeze(config)}")
+
+
+@app.command("evaluate-v1")
+def evaluate_frozen_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_evaluate.yaml")),
+) -> None:
+    """Evaluate independently hashed checkpoints and baselines on frozen v1."""
+    from kyc_nli.v1 import evaluate_v1
+
+    console.print(f"Evaluation: {evaluate_v1(config)}")
+
+
+@app.command("selective-v1")
+def selective_frozen_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_selective.yaml")),
+) -> None:
+    """Lock v1 selective thresholds on dev, then score the preserved test predictions."""
+    from kyc_nli.selective_v1 import run
+
+    console.print(f"Selective evaluation: {run(config)}")
+
+
+@app.command("annotation-v1")
+def annotation_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_annotation.yaml")),
+) -> None:
+    """Prepare blank blinded v1 worksheets and a separately stored analyst key."""
+    from kyc_nli.annotation_v1 import prepare
+
+    console.print(f"Annotation batch: {prepare(config)}")
+
+
+@app.command("check-annotation-v1")
+def check_annotation_v1(
+    batch: Path = typer.Option(...), sheet_a: Path = typer.Option(...),
+    sheet_b: Path = typer.Option(...),
+) -> None:
+    """Validate returned worksheets; never infer independence from labels alone."""
+    from kyc_nli.annotation_v1 import check
+
+    console.print(f"Annotation check: {check(batch, sheet_a, sheet_b)}")
+
+
+@app.command("paper-v1")
+def paper_v1(
+    config: Path = typer.Option(Path("configs/experiments/paper_v1.yaml")),
+) -> None:
+    """Generate manuscript tables, figures and prose numbers from pinned v1 results."""
+    from kyc_nli.paper_v1 import run
+
+    console.print(f"Paper build: {run(config)}")
+
+
+@app.command("pilot-report-v1")
+def pilot_report_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_pilot_report.yaml")),
+) -> None:
+    """Preserve human submissions and report candidate labels, uncertainty and limitations."""
+    from kyc_nli.pilot_report import run
+
+    console.print(f"Pilot report: {run(config)}")
+
+
+@app.command("trace-v0")
+def trace_v0(
+    config: Path = typer.Option(
+        Path("configs/experiments/v0_trace.yaml"), help="Frozen v0 trace configuration."
+    ),
+) -> None:
+    """Run preserved XLM-R weights at length 192 and audit historical predictions."""
+    from kyc_nli.nli.trace import run_trace
+
+    output = run_trace(config)
+    console.print(f"Trace saved to {output}")
+
+
+@app.command("investigate-v0")
+def investigate_v0(
+    config: Path = typer.Option(
+        Path("configs/experiments/v0_trace_investigation.yaml"),
+        help="Archive comparison configuration; requires a completed primary trace.",
+    ),
+) -> None:
+    """Check archived weights on the same wrong-name subset, without retraining."""
+    import runpy
+
+    namespace = runpy.run_path(str(repo_root() / "scripts/investigate_v0_trace.py"))
+    output = namespace["run"](config)
+    console.print(f"Investigation saved to {output}")
 
 
 def _calibration_words(language: str, n: int, seed: int) -> list[str]:

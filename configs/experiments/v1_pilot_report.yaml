@@ -1,0 +1,12 @@
+batch: results/v1_annotation/20261027T190125.316172Z
+initial_adjudication: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/initial_adjudication.csv
+review_assignment: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/review_assignment.csv
+reviewer_1: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/reviewer_1.csv
+reviewer_2: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/reviewer_2.csv
+attestation_1: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/attestation_1.csv
+attestation_2: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/attestation_2.csv
+annotator_declarations: results/v1_pilot_report/20261028T061540.433489Z/private_received_originals/annotator_declarations.csv
+sheet_a: results/v1_annotation/20261027T190125.316172Z/checks/20261027T191633.273858Z/received_originals/annotator_A.csv
+sheet_b: results/v1_annotation/20261027T190125.316172Z/checks/20261027T191633.273858Z/received_originals/annotator_B.csv
+output_root: results/v1_pilot_report
+seed: 20261028

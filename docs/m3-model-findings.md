@@ -244,6 +244,14 @@ The trained checkpoint (`model.safetensors`, `config.json`, `tokenizer.json`, `t
 ## Status and what remains
 
 - **M3b (GPU Run):** ✅ **Complete.** XLM-RoBERTa trained on T4 GPU in 13.7 min; checkpoint placed in `results/models/cross_encoder/`.
-- **M4 (Risk–coverage curve):** The proper shape of the selective-prediction claim across operating thresholds.
+- **M4 (Risk–coverage curve):** Tooling is implemented in [M4](m4-selective-prediction.md).
+  Hold automation error fixed when comparing review load, and select thresholds on dev.
+  Historical reports disagree on the checkpoint and operating policy. Their numerical claims
+  require a fresh checkpoint-linked evaluation; bootstrapping the curve remains outstanding.
+  Rule confidences encode which rule fired, so their ranking of correctness must be checked.
 - **M5 (Human-labelled subset):** 500-instance validation subset for human agreement ($\kappa$) on evidence insufficiency.
 - **M6–M7 (Ablations & Paper write-up):** Per-phenomenon and per-language deep dives; final project paper.
+- **Everything here is still synthetic.** Real romanisations (M2) and real OCR
+  rates (M1) feed the generator, but no real identity document does, and no human
+  validation with verified independent provenance is established here. M5 remains
+  a limit on the claims.

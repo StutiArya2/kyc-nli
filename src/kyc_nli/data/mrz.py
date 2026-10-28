@@ -8,6 +8,7 @@ signals. TD3 (passport) only for now; TD1 (ID card, 3x30) is not yet implemented
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import date
 
 FILLER = "<"
@@ -20,12 +21,18 @@ def check_digit(value: str) -> str:
     """ICAO 9303 modulo-10 check digit with 7-3-1 weighting."""
     total = 0
     for i, ch in enumerate(value):
-        if ch.isdigit():
-            v = int(ch)
-        elif ch == FILLER:
+        up = ch.upper()
+        # ASCII-only, deliberately. `ch.isdigit()` is true of '٣' and
+        # `ch.isalpha()` of 'É' and 'अ', and the arithmetic below would then
+        # return a digit in 0-9 that looks entirely plausible and verifies
+        # against nothing. A check digit that fails loudly is worth more than
+        # one that is quietly meaningless.
+        if "0" <= up <= "9":
+            v = int(up)
+        elif up == FILLER:
             v = 0
-        elif ch.isalpha():
-            v = ord(ch.upper()) - ord("A") + 10
+        elif "A" <= up <= "Z":
+            v = ord(up) - ord("A") + 10
         else:
             raise ValueError(f"Character {ch!r} is not valid in an MRZ field")
         total += v * _WEIGHTS[i % 3]
@@ -38,10 +45,22 @@ def transliterate_to_mrz_charset(text: str) -> str:
     Spaces, hyphens and apostrophes become the filler character, which is where
     a surprising amount of real-world mismatch comes from: O'BRIEN becomes
     O<BRIEN in the MRZ but stays O'BRIEN in the VIZ.
+
+    Accented Latin letters FOLD to their base letter -- É to E, Ü to U -- as
+    ICAO Doc 9303 Part 3 requires. Dropping the letter instead would emit JOS<
+    for JOSÉ: a different name, in the one zone the rule baseline trusts most,
+    manufacturing exactly the false mismatch this project measures.
     """
+    # NFKD splits a precomposed letter into base + combining mark, so discarding
+    # the marks leaves the base. Letters with no decomposition (ß, Ł, Ø) survive
+    # as themselves and are dropped below, which is the honest outcome: they
+    # need a language-specific expansion table, not a guess.
+    decomposed = unicodedata.normalize("NFKD", text.upper())
     out: list[str] = []
-    for ch in text.upper():
-        if ch.isascii() and (ch.isalnum()):
+    for ch in decomposed:
+        if unicodedata.combining(ch):
+            continue
+        if ch.isascii() and ch.isalnum():
             out.append(ch)
         elif ch in " -'":
             out.append(FILLER)

@@ -17,6 +17,14 @@ from kyc_nli.languages import load_languages
 from kyc_nli.schema import Label
 
 
+@pytest.fixture(autouse=True)
+def baseline_systems(monkeypatch):
+    """Exercise the documented no-checkpoint demo path on every developer machine."""
+    from kyc_nli.baselines import BASELINES
+
+    monkeypatch.setattr(demo, "available_systems", lambda: dict(BASELINES))
+
+
 @pytest.fixture(scope="module")
 def instances():
     config = GeneratorConfig(

@@ -39,8 +39,29 @@ The system's purpose is to route work to humans, so it is also judged on:
 ## Selective prediction
 
 The NEUTRAL-to-human-review mechanism is operationally an abstention policy, so
-it is compared on a **risk–coverage curve**, not on accuracy
-(`kyc_nli.evaluation.risk_coverage`).
+it is compared on a curve rather than on accuracy. Run it with
+`kyc-nli risk-coverage`; the measured result is in
+[m4-selective-prediction.md](m4-selective-prediction.md).
+
+**Two curves, and they answer different questions.**
+
+- `risk_coverage` ranks predictions by confidence, keeps the most confident
+  fraction, and reports the error rate among those kept. It asks whether a
+  system's confidence is worth anything. Ties are averaged over orderings within
+  the tied block, not broken by input order — a system that reports the same
+  confidence for everything must render as a flat line, and breaking ties by
+  dataset order drew it a descending one instead.
+- `selective_curve` counts a NEUTRAL prediction as **sent to a human**: never an
+  error, never coverage. It asks what the system costs to operate. This is the
+  one the project's claim is stated in, because charging a structural abstention
+  as an error scores the safest possible system as the worst one.
+
+**Never compare two systems at their own operating points when the claim is about
+review load.** They abstain at different rates and macro-F1 charges nothing for
+the labour that buys. Use `review_load_at_error`: fix the automation error rate,
+report what each system costs to run there, and report "unreachable" rather than
+"100% review" when a system cannot meet the budget at any threshold — declining
+to answer is not meeting a target.
 
 This is also the diagnostic for decision 0002: a system whose NEUTRAL class is
 really a confidence threshold produces a curve indistinguishable from

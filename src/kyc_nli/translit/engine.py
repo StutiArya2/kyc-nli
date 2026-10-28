@@ -63,9 +63,27 @@ class Transliterator(ABC):
         """All Latin renderings this engine accepts. Uppercase.
 
         Rule-generated variants unioned with any attested spellings.
+
+        An empty input has exactly one rendering -- the empty string -- and every
+        engine must say so. The Latin engine did; the four native-script engines
+        returned the *empty set*, which reads as "no rendering is acceptable"
+        rather than "this is empty". A field wiped out by OCR is the dominant
+        Urdu failure mode, so the disagreement sat directly on the commonest
+        degraded input, and it made the baseline's behaviour depend on which
+        language it was handed.
         """
+        if not text:
+            return {""}
         attested = getattr(self, "_lexicon", {}).get(text, set())
-        return self._generate(text) | attested
+        generated = self._generate(text) | attested
+        # Input that carries no romanisable content -- a lone ZWNJ, a field of
+        # spaces -- still romanises to *something*, and that something is the
+        # empty string. Returning the empty set instead says no Latin rendering
+        # is acceptable, which is a claim about a name rather than about an
+        # absence of one. A zero-width joiner surviving as a field's entire
+        # content is not hypothetical: M1 traced the Tamil phantom 0.071 CER
+        # floor to exactly that character.
+        return generated or {""}
 
     @abstractmethod
     def _generate(self, text: str) -> set[str]:

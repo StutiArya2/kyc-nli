@@ -1,0 +1,15 @@
+dataset_manifest: data/processed/synth_v1.manifest.json
+training_reference: data/processed/synth_v0.train.jsonl
+output_root: results/v1_evaluation
+seed: 20260906
+bootstrap: 1000
+max_length: 192
+batch_size: 4
+threads: 2
+checkpoints:
+  local_xlmr:
+    path: results/models/cross_encoder
+    sha256: ae040c211cd20036ea1a610ee8decab193fa4738f10ec2f31c29f1723e805dad
+  archived_xlmr:
+    path: results/v0_trace_investigation/20261027T174038.177466Z/archived_checkpoint
+    sha256: 469c1d7860f087b99ecd34f5f7dcc56218df66fd393729ebc8904d1a38b25144

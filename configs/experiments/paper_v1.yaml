@@ -1,0 +1,18 @@
+seed: 20260906
+output_root: results/paper_v1_build
+inputs:
+  dataset:
+    path: data/processed/synth_v1.manifest.json
+    sha256: 03eec5be5f0c394135d602b8b31afc04cb4fff5bae3a1a83ab4e633448171229
+  evaluation:
+    path: results/v1_evaluation/20261027T181210.848535Z/summary.json
+    sha256: 017a012c4ea15078d3f12d6f53a9b79593e695b5de978bbe48f9ede2ca458807
+  evaluation_start:
+    path: results/v1_evaluation/20261027T181210.848535Z/start.json
+    sha256: 19b8c51fe1896c008f6b7c76d365720ac325b9e7790940fb84532b39edb1c0e8
+  selective:
+    path: results/v1_selective/20261027T184121.760526Z/summary.json
+    sha256: 2ae167b716e4436ffa331b98d06b8cb74f41c8adb7499d858a27369e6c586b11
+  pilot:
+    path: results/v1_pilot_report/20261028T061540.433489Z/report.json
+    sha256: 7d4be2a85319bee6628a9c6c77b64c61852ef2b5f6215f2ead4035c56784121d

@@ -1,5 +1,13 @@
 # KYC-NLI project plan
 
+> **Current status, 28 October 2026:** corrected v1 is frozen; both recovered
+> XLM-R checkpoints and v1 selective policies are evaluated; the 60-case human
+> pilot record is finalized with three unresolved cases and one disagreement.
+> M1b (Nastaliq/second OCR engine), M2b (person-name corpus), independent training
+> seeds and real-document validation remain open. The remainder of this document
+> preserves the historical plan; its older numerical claims are not current v1
+> results. Use the README and `docs/v1-*.md` reports for current evidence.
+
 Status: **Phase 0 complete** (2026-09-06). The pilot ran and returned a result
 that changes the framing of the whole project. Read "The Phase-0 finding" before
 planning anything else.
@@ -114,6 +122,13 @@ The go/no-go signal on the revised central claim is available at the end of
 Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) at moderate noise
 *and* improve the risk–coverage curve, the claim is false.
 
+**Both conditions were tested and both held.** M3a: 0.972 [0.962, 0.982] against
+the rule engine's 0.601 [0.565, 0.640], paired difference +0.371 [0.329, 0.409].
+M4: the model's risk–coverage curve is monotone and flat at zero error to 65%
+coverage, while the rule engine's is not monotone at all — and at a 5%
+automation-error budget the rule engine cannot be operated at any threshold. The
+claim stands on the evidence that was specified in advance to falsify it.
+
 ---
 
 ## Milestones
@@ -121,13 +136,13 @@ Phase 1: if a fine-tuned model does not beat 0.597 macro-F1 (CI [0.552, 0.644]) 
 | # | Milestone | Output | Depends on |
 | --- | --- | --- | --- |
 | M0 | Repo, schema, generator, rule baseline, eval harness | ✅ this commit | — |
-| M1 | ✅ Noise-model calibration DONE. **Not on MIDV-2020** — it contains no Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four of five languages ([decision 0006](decisions/0006-ocr-calibration.md)). Render-based instead: HarfBuzz shaping + Tesseract + alignment. The hand-built model had deletion 10-17x too low; measured rates now live in `kyc_nli.ocr.measured`. | `docs/m1-ocr-calibration-findings.md` | — |
+| M1 | ✅ Noise-model calibration DONE. **Not on MIDV-2020** — it contains no Devanagari, Tamil, Bengali or Perso-Arabic document, so it cannot calibrate four of five languages ([decision 0006](decisions/0006-ocr-calibration.md)). Render-based instead: HarfBuzz shaping + Tesseract + alignment. The hand-built model had deletion 5-17x too low; measured rates now live in `kyc_nli.ocr.measured`. | `docs/m1-ocr-calibration-findings.md` | — |
 | M1b | Urdu in Nastaliq rather than Naskh, and a second OCR engine, to separate font and engine limits from script difficulty | corrected Urdu rates | M1 |
 | M2 | ✅ Dakshina integrated. Used to *measure* the engines rather than to replace the pools — it is general vocabulary, not names. Premise quantified; two engine bugs fixed. | `docs/m2-dakshina-findings.md`, `kyc-nli translit-eval` | — |
 | M2b | A name-shaped corpus: Wikidata person labels (CC0) in the four scripts | real names in the generator | M2 |
 | M3a | ✅ Cross-encoder trained and scored: **0.972 macro-F1** vs 0.601, review load 63%→29%, false rejection 9.3%→5.7%. Also found and fixed a split bug that had put 94% of test identities into training. | `docs/m3-model-findings.md` | M2 |
 | M3b | ✅ The GPU run DONE: XLM-R (`xlm-roberta-base`), embeddings unfrozen, trained on Colab T4 GPU (13.7 min). Dev macro-F1: 0.9677 across 4 epochs. Checkpoint imported to `results/models/cross_encoder`. | `docs/m3-model-findings.md`, `results/models/cross_encoder` | M3a |
-| M4 | ✅ Selective-prediction analysis DONE: AURC reduced 15.6%→0.2% (-98.9% error). At 5% error budget, cross-encoder cuts review load 98%→0%. Verified Decision 0002 diagnostic. | `docs/m4-selective-prediction-findings.md`, `docs/figures/` | M3 |
+| M4 | ✅ Selective-prediction tooling implemented. Compare review load at fixed automation error, with thresholds selected on dev. Historical reports disagree on model performance and operating policy; checkpoint-linked verification is pending. The earlier zero-review and rule-unreachable claims must not be combined. | `docs/m4-selective-prediction.md`, `kyc-nli risk-coverage`, `results/selective_prediction.json` | M3 |
 | M5 | Human-labelled 500-instance validation subset | kappa per class and language | label definitions frozen |
 | M6 | Ablations + error analysis | per-phenomenon, per-language, per-noise-level tables | M3 |
 | M7 | Write-up | paper draft | M4, M5, M6 |

@@ -107,7 +107,15 @@ def _encode(instances: list[Instance], predictions: list[Prediction]) -> tuple:
         groups[inst.contrast_group_id or inst.id].append(idx)
     # Ragged by construction: groups differ in size, which is itself a reason to
     # resample groups rather than instances.
-    group_members = [np.array(v, dtype=np.int32) for v in groups.values()]
+    #
+    # SORTED by group id, not in arrival order. The resampler draws groups by
+    # position, so arrival order used to leak into the interval: the same data
+    # and the same seed gave [0.566, 0.637] when the split came straight from the
+    # generator (shuffled) and [0.565, 0.640] when read back from disk (sorted by
+    # id). A confidence interval must not move because a file was reordered.
+    # Group ids are fixed-format, so sorted order is exactly the order an
+    # id-sorted file always produced, and every published interval is unchanged.
+    group_members = [np.array(groups[k], dtype=np.int32) for k in sorted(groups)]
     return gold, pred, group_members
 
 

@@ -1,0 +1,5 @@
+# Diagnostic comparison only; never replaces the primary local-checkpoint run.
+trace_dir: results/v0_trace/20261027T155356.047662Z
+checkpoint_archive: D:/Downloads/KYC_NLI_ALL_RESULTS.zip
+audit_archive: D:/Downloads/KYC_NLI_urgent_audit.zip
+output_root: results/v0_trace_investigation

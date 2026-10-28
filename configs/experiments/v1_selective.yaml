@@ -1,0 +1,5 @@
+evaluation_config: configs/experiments/v1_evaluate.yaml
+reference_evaluation: results/v1_evaluation/20261027T181210.848535Z
+output_root: results/v1_selective
+error_budgets: [0.10, 0.05, 0.02, 0.01]
+curve_steps: 50

@@ -384,7 +384,7 @@ function footer(s, text) {
     });
     py += 0.72;
   });
-  footer(s, "Noise rates MEASURED from Tesseract on shaped renders (M1) — a lower bound on real documents. The earlier hand-built model had deletion 10-17x too low and put moderate at 0.831. 5 languages × 120 identities, seed 20260906.");
+  footer(s, "Noise rates MEASURED from Tesseract on shaped renders (M1) — a lower bound on real documents. The earlier hand-built model had deletion 5-17x too low and put moderate at 0.831. 5 languages × 120 identities, seed 20260906.");
   s.addNotes("Lead with the number. 0.980 clean. That kills the original framing and points at the real one.");
 }
 

@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kyc_nli.baselines import available_systems
+from kyc_nli.baselines import NLISystem, available_systems
 from kyc_nli.data.generate import GeneratorConfig, InstanceGenerator
 from kyc_nli.data.io import load_instances, split_by_identity
 from kyc_nli.evaluation import evaluate, paired_bootstrap
@@ -120,6 +120,9 @@ def show_problem(instances: list[Instance]) -> None:
 
     viz = pick.observation(Field.SURNAME, Zone.VIZ)
     mrz = pick.observation(Field.SURNAME, Zone.MRZ)
+    if viz is None or mrz is None:  # pragma: no cover - the filter above excludes it
+        console.print("[yellow]No suitable instance in this sample.[/yellow]")
+        return
     spec = load_languages()[pick.language]
 
     # Show what is PRINTED on the document, not what OCR made of it. This slide
@@ -238,7 +241,7 @@ def show_scoreboard(instances: list[Instance], bootstrap: int) -> None:
     """The head-to-head, scored live."""
     _rule("Head to head, scored right now", 4)
 
-    systems: dict[str, object] = {}
+    systems: dict[str, NLISystem] = {}
     model_note = None
     for name, cls in available_systems().items():
         with console.status(f"[dim]loading {name}...[/dim]", spinner="dots"):

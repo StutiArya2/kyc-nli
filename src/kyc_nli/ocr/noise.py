@@ -324,11 +324,12 @@ def is_calibrated() -> bool:
 #: milestone M1 discharged it.
 #:
 #: The correction was not small, and it was not only a matter of scale. The
-#: hand-built model made SUBSTITUTION the dominant error, roughly 8x more likely
+#: hand-built model made SUBSTITUTION the dominant error, 4.5-8x more likely
 #: than deletion. Measured Tesseract output on Indic scripts is the other way
-#: round: deletion runs about 1.8x substitution at every level, and the
-#: hand-built deletion rate was 10-17x too low. The shape of the noise was
-#: wrong, not just its size.
+#: round: deletion exceeds substitution at every level, by 1.3-3.6x, and the
+#: hand-built deletion rate was 5-17x too low. The shape of the noise was
+#: wrong, not just its size. (An earlier version of this comment said "about
+#: 1.8x at every level" and "10-17x"; 1.8x was the moderate level alone.)
 #:
 #:   level          measured sub / del / ins      hand-built (wrong)
 #:   clean          0.000 / 0.000 / 0.000         same
