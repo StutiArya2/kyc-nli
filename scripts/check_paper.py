@@ -95,6 +95,19 @@ def main() -> int:
           f"{len(unverified)} unverified)")
     if unverified:
         print("  verify before submission: " + ", ".join(unverified))
+        problems.append("cited bibliography entries remain unverified")
+
+    # Result inputs are pinned independently of the old, mutable cache filenames.
+    from kyc_nli.paper_v1 import load_records
+
+    try:
+        load_records(repo_root() / "configs/experiments/paper_v1.yaml")
+    except (ValueError, OSError) as error:
+        problems.append(f"v1 paper input validation: {error}")
+    for stale in ("noise_robustness.json", "selective-prediction.json",
+                  "synth_v0.test.jsonl", "No human labels", "cannot meet a 5"):
+        if stale in tex:
+            problems.append(f"stale evidence or claim in manuscript: {stale}")
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:

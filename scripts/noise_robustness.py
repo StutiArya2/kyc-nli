@@ -71,6 +71,7 @@ def _test_split(level: str) -> list:
         identities_per_language=IDENTITIES,
         noise_preset=level,
         seed=SEED,
+        dataset_version="synth_v0",  # Historical benchmark; corrected v1 has a separate CLI.
     )
     test = split_by_identity(InstanceGenerator(config).generate())["test"]
     save_instances(test, path)

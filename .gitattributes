@@ -1,0 +1,2 @@
+# Preserve the official bibliography style verbatim, including upstream whitespace.
+paper/acl_natbib.bst -whitespace

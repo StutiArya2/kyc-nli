@@ -1,0 +1,6 @@
+dataset_manifest: data/processed/synth_v1.manifest.json
+label_definitions: docs/label-definitions.md
+output_root: results/v1_annotation
+seed: 20261028
+per_language_label: 4
+wrong_name_per_language: 2

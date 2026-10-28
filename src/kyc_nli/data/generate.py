@@ -26,8 +26,10 @@ objection:
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Literal
 
 from kyc_nli.data import mrz
 from kyc_nli.data.name_pools import NamePool, pool_for
@@ -108,7 +110,7 @@ class Identity:
 class GeneratorConfig:
     """Everything needed to reproduce a dataset. Serialised into the manifest."""
 
-    languages: tuple[str, ...] = ("en", "hi", "ta", "bn", "ur")
+    languages: tuple[str, ...] = field(default_factory=lambda: tuple(load_languages()))
     identities_per_language: int = 200
     noise_preset: str = "moderate"
     seed: int = 20260906
@@ -116,6 +118,21 @@ class GeneratorConfig:
     #: rather than the one printed on the document. Raising this makes the task
     #: harder for a lookup-table baseline and is the main difficulty knob.
     alt_romanisation_rate: float = 0.4
+    dataset_version: Literal["synth_v0", "synth_v1"] = "synth_v1"
+
+
+def normalise_surname(value: str) -> str:
+    """Ignore Unicode compatibility, case and separators when excluding aliases."""
+    return "".join(c for c in unicodedata.normalize("NFKC", value).casefold() if c.isalnum())
+
+
+def accepted_surnames(native: str, latin: str, script: Script, language: str) -> set[str]:
+    """Gold construction uses clean renderings; OCR damage never defines a negative."""
+    forms = {native, latin} | get_transliterator(script, language).variants(native)
+    # Several attested Latin spellings may share the same clean native surname.
+    forms.update(roman for name, roman in pool_for(language).surnames
+                 if normalise_surname(name) == normalise_surname(native))
+    return {normalise_surname(form) for form in forms} - {""}
 
 
 class InstanceGenerator:
@@ -123,6 +140,8 @@ class InstanceGenerator:
 
     def __init__(self, config: GeneratorConfig | None = None) -> None:
         self.config = config or GeneratorConfig()
+        if self.config.dataset_version not in {"synth_v0", "synth_v1"}:
+            raise ValueError("Unsupported dataset version")
         self.rng = random.Random(self.config.seed)
         noise_cfg: NoiseConfig = NOISE_PRESETS[self.config.noise_preset]
         self.noiser = OCRNoiser(noise_cfg, seed=self.config.seed)
@@ -300,6 +319,31 @@ class InstanceGenerator:
 
     # -- contrast group 1: cross-script name matching ----------------------
 
+    def _negative_surname(self, identity: Identity, other: Identity, stem: str) -> str:
+        """Repair only collisions without consuming the identity or OCR RNG streams.
+
+        Rejection-sampling whole identities shifts every subsequent document,
+        which would confound the comparison with the frozen v0 checkpoint.
+        Legacy v0 generation remains an explicit historical reproduction path.
+        """
+        if self.config.dataset_version == "synth_v0":
+            return other.surname_latin
+        accepted = accepted_surnames(identity.surname_native, identity.surname_latin,
+                                     identity.script, identity.language)
+        claimed = other.surname_latin
+        if normalise_surname(claimed) in accepted:
+            candidates = sorted({latin for native, latin in pool_for(identity.language).surnames
+                                 if normalise_surname(latin) not in accepted
+                                 and normalise_surname(native) !=
+                                 normalise_surname(identity.surname_native)})
+            if not candidates:
+                raise ValueError(f"No distinct surname available for {identity.language}")
+            rng = random.Random(f"{self.config.seed}:{stem}:negative_v1")
+            claimed = rng.choice(candidates)
+        if normalise_surname(claimed) in accepted:
+            raise AssertionError("Contradiction claim matches an accepted clean surname")
+        return claimed
+
     def _cross_script_group(
         self, identity: Identity, other: Identity, stem: str
     ) -> list[Instance]:
@@ -343,18 +387,19 @@ class InstanceGenerator:
         # CONTRADICTION: a different person's surname. Chosen to be *close* in
         # Latin form where possible, so the instance is not solvable by a crude
         # edit-distance threshold.
+        negative = self._negative_surname(identity, other, stem)
         contradict = self._instance(
             id=f"{group}-c",
             identity=identity,
             premise=premise,
             field=Field.SURNAME,
-            claimed_value=other.surname_latin,
+            claimed_value=negative,
             label=Label.CONTRADICTION,
             phenomenon="cross_script_name_mismatch",
             contrast_group_id=group,
             identity_id=stem,
             rationale=(
-                f"{other.surname_latin!r} is not a rendering of "
+                f"{negative!r} is not a rendering of "
                 f"{identity.surname_native!r} under any accepted romanisation."
             ),
         )
@@ -530,7 +575,7 @@ class InstanceGenerator:
             phenomenon=phenomenon,
             rationale=rationale,
             provenance=Provenance(
-                generator="synthetic_v0",
+                generator=self.config.dataset_version.replace("synth_", "synthetic_"),
                 source_corpus="kyc_nli.data.name_pools (embedded)",
                 source_license="MIT",
                 seed=self.config.seed,

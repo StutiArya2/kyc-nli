@@ -1,0 +1,7 @@
+dataset_version: synth_v1
+identities_per_language: 200
+noise_preset: moderate
+seed: 20260906
+alt_romanisation_rate: 0.4
+reference_v0: data/processed/synth_v0.jsonl
+output: data/processed/synth_v1.jsonl

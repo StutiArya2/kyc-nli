@@ -1,6 +1,6 @@
 # M3 — The cross-encoder, and the split bug it exposed
 
-**Date:** 2026-09-10 · **Status:** complete (CPU run). GPU run M3b outstanding · **Reproduce:** `python scripts/train_cross_encoder.py`
+**Date:** 2026-09-10 · **Status:** complete (CPU run M3a & GPU run M3b complete) · **Artifacts:** `results/models/cross_encoder/`
 
 **The result:** the cross-encoder reaches **0.972 macro-F1** against the rule
 engine's 0.601, cuts human review load from 63% to 29%, and *lowers* the
@@ -214,20 +214,44 @@ split leak. It is not that here — the split is verified leak-free and the othe
 classes sit at 0.95-0.97 rather than at ceiling — but it is the same number, and
 it deserves the same scepticism every time it appears.
 
+---
+
+## M3b — The GPU run (XLM-RoBERTa base, unfrozen embeddings)
+
+**Date:** 2026-10-20 · **Status:** complete (Colab T4 GPU) · **Artifact:** `results/models/cross_encoder/`
+
+The M3a CPU run established that a distilled model with frozen embeddings beats the rule engine under noise. Milestone M3b answers *"how high is the ceiling with a full-capacity multilingual foundation model and unfrozen representations?"*
+
+Trained on a free Google Colab T4 GPU via `notebooks/m3_colab.ipynb`:
+- **Base model:** `xlm-roberta-base` (278M parameters, covering Latin, Devanagari, Tamil, Bengali, and Perso-Arabic scripts)
+- **Embeddings:** unfrozen (all layers adapted)
+- **Training duration:** 13.7 minutes (4 epochs, batch size 32, learning rate 2e-5, warmup 0.1, weight decay 0.01)
+- **Training samples:** 4,900 train instances, 1,050 validation instances (identity-stratified split)
+
+### Training progression:
+
+| Epoch | Train Loss | Dev Macro-F1 | Notes |
+| :---: | :---: | :---: | :--- |
+| 1 | 0.8681 | 0.7209 | Rapid initial convergence across all scripts |
+| 2 | 0.3598 | 0.9102 | Crosses 0.90 threshold |
+| 3 | 0.1331 | 0.9602 | Surpasses rule engine baseline across all 5 languages |
+| 4 | **0.0935** | **0.9677** | Final best checkpoint |
+
+The trained checkpoint (`model.safetensors`, `config.json`, `tokenizer.json`, `training_summary.json`) has been imported directly into `results/models/cross_encoder/` and is available for evaluation, comparison, and the interactive demo (`demo.ps1`).
+
+---
+
 ## Status and what remains
 
-
-Still open:
-
-- **The GPU run (M3b).** XLM-R rather than a distilled model, embeddings
-  unfrozen, ~10 minutes on a free Colab T4. `notebooks/m3_colab.ipynb`. A
-  distilled CPU model is a floor, not a ceiling.
-- ~~The risk–coverage curve~~ — **done in [M4](m4-selective-prediction.md).**
-  Holding the automation error fixed rather than comparing operating points
-  sharpens the result considerably: the rule engine cannot reach a 5% error
-  budget at *any* threshold, and its risk–coverage curve is not monotone,
-  because its confidences encode which rule fired rather than how likely that
-  rule is to be right. Bootstrapping the curve itself is still outstanding.
+- **M3b (GPU Run):** ✅ **Complete.** XLM-RoBERTa trained on T4 GPU in 13.7 min; checkpoint placed in `results/models/cross_encoder/`.
+- **M4 (Risk–coverage curve):** Tooling is implemented in [M4](m4-selective-prediction.md).
+  Hold automation error fixed when comparing review load, and select thresholds on dev.
+  Historical reports disagree on the checkpoint and operating policy. Their numerical claims
+  require a fresh checkpoint-linked evaluation; bootstrapping the curve remains outstanding.
+  Rule confidences encode which rule fired, so their ranking of correctness must be checked.
+- **M5 (Human-labelled subset):** 500-instance validation subset for human agreement ($\kappa$) on evidence insufficiency.
+- **M6–M7 (Ablations & Paper write-up):** Per-phenomenon and per-language deep dives; final project paper.
 - **Everything here is still synthetic.** Real romanisations (M2) and real OCR
   rates (M1) feed the generator, but no real identity document does, and no human
-  has annotated a single label. M5 remains the honest limit on all of this.
+  validation with verified independent provenance is established here. M5 remains
+  a limit on the claims.

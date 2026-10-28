@@ -10,6 +10,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytest.importorskip("freetype", reason="freetype-py not installed; install with .[ocr]")
+pytest.importorskip("uharfbuzz", reason="uharfbuzz not installed; install with .[ocr]")
+
 from kyc_nli.languages import script_of
 from kyc_nli.ocr import calibrate, render
 from kyc_nli.ocr.render import DEGRADE_LEVELS, Script

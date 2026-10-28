@@ -25,6 +25,18 @@ from kyc_nli.cli import app
 runner = CliRunner(env={"COLUMNS": "240"})
 
 
+@pytest.fixture(autouse=True)
+def baseline_systems(monkeypatch):
+    """Ignored user checkpoints must not change the CLI unit tests' workload.
+
+    Real neural inference is covered by the slow training smoke test and the
+    frozen evaluation command, rather than rerun against a user's dev set here.
+    """
+    from kyc_nli.baselines import BASELINES
+
+    monkeypatch.setattr("kyc_nli.cli.available_systems", lambda: dict(BASELINES))
+
+
 @pytest.fixture(scope="module")
 def dataset(tmp_path_factory):
     """A real generated dataset, splits and manifest included."""
@@ -277,6 +289,8 @@ def test_calibrate_ocr_without_tesseract_names_the_missing_language_packs(
     """Tesseract is a system package with per-language data files, and the usual
     failure is having the binary but not hin/tam/ben/urd. Reporting only
     'tesseract not found' would send the reader to reinstall what they have."""
+    pytest.importorskip("freetype", reason="OCR rendering extra is not installed")
+    pytest.importorskip("uharfbuzz", reason="OCR rendering extra is not installed")
     from kyc_nli.ocr import calibrate as ocr_calibrate
     from kyc_nli.ocr import render as ocr_render
 

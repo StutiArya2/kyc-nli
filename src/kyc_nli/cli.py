@@ -8,7 +8,13 @@ notebook to produce a number that goes in a table, it belongs here instead.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import typer
 from rich.console import Console
@@ -30,8 +36,6 @@ from kyc_nli.evaluation import (
 )
 from kyc_nli.evaluation.transliteration import HEADER, evaluate_transliteration
 from kyc_nli.languages import load_languages, repo_root
-from kyc_nli.ocr import calibrate as ocr_calibrate
-from kyc_nli.ocr import render as ocr_render
 from kyc_nli.schema import Label
 from kyc_nli.translit import get_transliterator
 
@@ -62,7 +66,7 @@ def languages() -> None:
 @app.command()
 def generate(
     out: Path = typer.Option(
-        Path("data/processed/synth_v0.jsonl"), help="Output JSONL path (gitignored)."
+        Path("data/processed/synth_v1.jsonl"), help="Output JSONL path (gitignored)."
     ),
     identities: int = typer.Option(200, help="Fabricated identities per language."),
     noise: str = typer.Option("moderate", help="clean | light | moderate | heavy"),
@@ -70,6 +74,14 @@ def generate(
     split: bool = typer.Option(True, help="Also write train/dev/test splits."),
 ) -> None:
     """Generate the synthetic benchmark. No real identity data is involved."""
+    out = _resolve(out)
+    targets = [out, out.with_suffix(".manifest.json")]
+    if split:
+        targets += [out.with_name(f"{out.stem}.{name}.jsonl") for name in ("train", "dev", "test")]
+    if any(path.exists() for path in targets):
+        raise FileExistsError("Refusing to overwrite an existing dataset or manifest")
+    if out.name.startswith("synth_v0"):
+        raise ValueError("Corrected generation must use a new v1 output path")
     config = GeneratorConfig(
         languages=tuple(load_languages()),
         identities_per_language=identities,
@@ -91,6 +103,7 @@ def generate(
             "noise_preset": config.noise_preset,
             "seed": config.seed,
             "alt_romanisation_rate": config.alt_romanisation_rate,
+            "dataset_version": config.dataset_version,
         },
     )
 
@@ -479,6 +492,15 @@ def calibrate_ocr(
     Bengali or Perso-Arabic document, so it cannot calibrate four of our five
     languages. See docs/decisions/0006-ocr-calibration.md.
     """
+    try:
+        from kyc_nli.ocr import calibrate as ocr_calibrate
+        from kyc_nli.ocr import render as ocr_render
+    except ImportError as err:
+        raise typer.BadParameter(
+            "OCR calibration requires optional OCR dependencies (pillow, uharfbuzz, freetype-py). "
+            "Install with: pip install -e \".[ocr]\""
+        ) from err
+
     if fetch or not ocr_render.fonts_available():
         console.print("Fetching pinned Noto fonts...")
         console.print(f"[green]Fonts at[/green] {ocr_render.download_fonts()}")
@@ -578,6 +600,105 @@ def demo(
         only=step,
         sample=sample,
     )
+
+
+@app.command("freeze-v1")
+def freeze_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_freeze.yaml")),
+) -> None:
+    """Freeze corrected negatives with unchanged identity/OCR streams and split IDs."""
+    from kyc_nli.v1 import freeze
+
+    console.print(f"Frozen manifest: {freeze(config)}")
+
+
+@app.command("evaluate-v1")
+def evaluate_frozen_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_evaluate.yaml")),
+) -> None:
+    """Evaluate independently hashed checkpoints and baselines on frozen v1."""
+    from kyc_nli.v1 import evaluate_v1
+
+    console.print(f"Evaluation: {evaluate_v1(config)}")
+
+
+@app.command("selective-v1")
+def selective_frozen_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_selective.yaml")),
+) -> None:
+    """Lock v1 selective thresholds on dev, then score the preserved test predictions."""
+    from kyc_nli.selective_v1 import run
+
+    console.print(f"Selective evaluation: {run(config)}")
+
+
+@app.command("annotation-v1")
+def annotation_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_annotation.yaml")),
+) -> None:
+    """Prepare blank blinded v1 worksheets and a separately stored analyst key."""
+    from kyc_nli.annotation_v1 import prepare
+
+    console.print(f"Annotation batch: {prepare(config)}")
+
+
+@app.command("check-annotation-v1")
+def check_annotation_v1(
+    batch: Path = typer.Option(...), sheet_a: Path = typer.Option(...),
+    sheet_b: Path = typer.Option(...),
+) -> None:
+    """Validate returned worksheets; never infer independence from labels alone."""
+    from kyc_nli.annotation_v1 import check
+
+    console.print(f"Annotation check: {check(batch, sheet_a, sheet_b)}")
+
+
+@app.command("paper-v1")
+def paper_v1(
+    config: Path = typer.Option(Path("configs/experiments/paper_v1.yaml")),
+) -> None:
+    """Generate manuscript tables, figures and prose numbers from pinned v1 results."""
+    from kyc_nli.paper_v1 import run
+
+    console.print(f"Paper build: {run(config)}")
+
+
+@app.command("pilot-report-v1")
+def pilot_report_v1(
+    config: Path = typer.Option(Path("configs/experiments/v1_pilot_report.yaml")),
+) -> None:
+    """Preserve human submissions and report candidate labels, uncertainty and limitations."""
+    from kyc_nli.pilot_report import run
+
+    console.print(f"Pilot report: {run(config)}")
+
+
+@app.command("trace-v0")
+def trace_v0(
+    config: Path = typer.Option(
+        Path("configs/experiments/v0_trace.yaml"), help="Frozen v0 trace configuration."
+    ),
+) -> None:
+    """Run preserved XLM-R weights at length 192 and audit historical predictions."""
+    from kyc_nli.nli.trace import run_trace
+
+    output = run_trace(config)
+    console.print(f"Trace saved to {output}")
+
+
+@app.command("investigate-v0")
+def investigate_v0(
+    config: Path = typer.Option(
+        Path("configs/experiments/v0_trace_investigation.yaml"),
+        help="Archive comparison configuration; requires a completed primary trace.",
+    ),
+) -> None:
+    """Check archived weights on the same wrong-name subset, without retraining."""
+    import runpy
+
+    namespace = runpy.run_path(str(repo_root() / "scripts/investigate_v0_trace.py"))
+    output = namespace["run"](config)
+    console.print(f"Investigation saved to {output}")
 
 
 def _calibration_words(language: str, n: int, seed: int) -> list[str]:

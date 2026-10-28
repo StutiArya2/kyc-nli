@@ -1,0 +1,17 @@
+# Frozen inference only. Existing v0 data, cache and weights are never overwritten.
+dataset_version: synth_v0
+test_path: data/processed/synth_v0.test.jsonl
+train_path: data/processed/synth_v0.train.jsonl
+dev_path: data/processed/synth_v0.dev.jsonl
+model_dir: results/models/cross_encoder
+candidate_model_dir: cross_encoder/results/models/cross_encoder
+cache_path: results/predictions_cache.json
+audit_path: D:/Downloads/KYC_NLI_verified_metrics_and_gaps_2026-10-27.md
+backup_path: results/recovery_20261027T153518Z
+output_root: results/v0_trace
+max_length: 192
+batch_size: 4
+device: cpu
+threads: 2
+seed: 20260906
+bootstrap: 1000
