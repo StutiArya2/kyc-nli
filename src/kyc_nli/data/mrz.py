@@ -87,8 +87,14 @@ def build_td3(
     date_of_expiry: date,
     issuing_state: str | None = None,
     document_type: str = "P",
+    optional_data: str = "",
 ) -> tuple[str, str]:
-    """Build the two 44-character TD3 MRZ lines."""
+    """Build the two 44-character TD3 MRZ lines.
+
+    ``optional_data`` is the 14-character personal-number field. The benchmark
+    leaves it blank; it is a parameter so the composite check digit can be tested
+    against a specimen that fills it, which is the only case that exercises it.
+    """
     issuing_state = issuing_state or nationality
 
     name = (
@@ -101,10 +107,15 @@ def build_td3(
     doc_no = _pad(transliterate_to_mrz_charset(document_number), 9)
     dob = format_mrz_date(date_of_birth)
     doe = format_mrz_date(date_of_expiry)
-    optional = _pad("", 14)
+    optional = _pad(transliterate_to_mrz_charset(optional_data), 14)
 
+    # The composite digit covers the optional field AND that field's own check
+    # digit (line-2 positions 1-10, 14-20 and 22-43). Leaving the last one out
+    # went unnoticed because a blank field's check digit is 0 and sits at the end,
+    # so it changed nothing; with any personal number present it gave a wrong digit.
     composite_source = (
-        doc_no + check_digit(doc_no) + dob + check_digit(dob) + doe + check_digit(doe) + optional
+        doc_no + check_digit(doc_no) + dob + check_digit(dob) + doe + check_digit(doe)
+        + optional + check_digit(optional)
     )
     line2 = (
         f"{doc_no}{check_digit(doc_no)}"

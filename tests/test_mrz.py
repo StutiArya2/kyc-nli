@@ -241,3 +241,36 @@ def test_parsing_a_truncated_name_does_not_raise() -> None:
     """A damaged MRZ read is the normal case, not the exceptional one."""
     assert parse_mrz_name("P<IND") == ("", "")
     assert parse_mrz_name("") == ("", "")
+
+
+def test_composite_check_digit_covers_the_optional_field_and_its_check_digit() -> None:
+    """ICAO's published TD3 specimen (the fictional state of Utopia) fills the
+    optional field, which is the only case where leaving that field's own check
+    digit out of the composite gives a different answer: 9 instead of 0."""
+    line1, line2 = build_td3(
+        surname_latin="ERIKSSON",
+        given_latin="ANNA MARIA",
+        document_number="L898902C3",
+        nationality="UTO",
+        date_of_birth=date(1974, 8, 12),
+        sex="F",
+        date_of_expiry=date(2012, 4, 15),
+        optional_data="ZE184226B",
+    )
+    assert line1 == "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<"
+    assert line2 == "L898902C36UTO7408122F1204159ZE184226B<<<<<10"
+
+
+def test_a_blank_optional_field_is_unchanged_by_the_composite_fix() -> None:
+    """Every generated document leaves the field blank, so no frozen dataset moves."""
+    _, line2 = build_td3(
+        surname_latin="ERIKSSON",
+        given_latin="ANNA MARIA",
+        document_number="L898902C3",
+        nationality="UTO",
+        date_of_birth=date(1974, 8, 12),
+        sex="F",
+        date_of_expiry=date(2012, 4, 15),
+    )
+    body = "L898902C3" + "6" + "740812" + "2" + "120415" + "9" + FILLER * 14
+    assert line2[-2:] == "0" + check_digit(body)
